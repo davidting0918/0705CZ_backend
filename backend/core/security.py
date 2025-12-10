@@ -25,7 +25,9 @@ import bcrypt as bcrypt_lib
 load_dotenv("backend/.env")
 
 # Bcrypt configuration
-BCRYPT_ROUNDS = 12
+BCRYPT_ROUNDS_USER = 12
+BCRYPT_ROUNDS_ADMIN = 14  # Higher security for admin accounts
+BCRYPT_ROUNDS = BCRYPT_ROUNDS_USER  # Backward compatibility
 
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
@@ -40,16 +42,29 @@ SESSION_COOKIE_NAME = "session_token"
 
 # ================== Password Utilities ==================
 
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
+def hash_password_user(password: str) -> str:
+    """Hash a password for users using bcrypt with user rounds."""
     password_bytes = password.encode('utf-8')
-    salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS)
+    salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS_USER)
     hashed = bcrypt_lib.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')
 
 
+def hash_password_admin(password: str) -> str:
+    """Hash a password for admins using bcrypt with admin rounds (higher security)."""
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS_ADMIN)
+    hashed = bcrypt_lib.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt (backward compatibility, uses user rounds)."""
+    return hash_password_user(password)
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
+    """Verify a password against its hash (works for both user and admin hashes)."""
     password_bytes = plain_password.encode('utf-8')
     hashed_bytes = hashed_password.encode('utf-8')
     return bcrypt_lib.checkpw(password_bytes, hashed_bytes)
@@ -60,6 +75,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def generate_user_id() -> str:
     """
     Generate a random 6-digit user ID.
+    Format: 6 numeric characters (e.g., "123456")
+    """
+    return "".join(random.choices(string.digits, k=6))
+
+
+def generate_admin_id() -> str:
+    """
+    Generate a random 6-digit admin ID.
     Format: 6 numeric characters (e.g., "123456")
     """
     return "".join(random.choices(string.digits, k=6))

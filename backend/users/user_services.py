@@ -7,7 +7,7 @@ from datetime import timezone as tz
 from typing import Optional
 
 from backend.core.db_manager import get_db
-from backend.core.security import generate_user_id, hash_password
+from backend.core.security import generate_user_id, hash_password_user
 from backend.users.user_models import (
     UserCreate,
     UserProfileResponse,
@@ -120,7 +120,7 @@ class UserService:
             user_id=user_id,
             email=request.email,
             name=request.name,
-            password_hash=hash_password(request.password),
+            password_hash=hash_password_user(request.password),
             phone=request.phone,
             address=request.address,
             is_active=True,

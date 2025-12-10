@@ -11,7 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from backend.auth.auth_services import get_current_user_token
+from backend.auth.auth_services import get_current_admin_token
 from backend.products.product_models import (
     CategoryListResponse,
     ProductCreateRequest,
@@ -87,11 +87,11 @@ async def get_product(
 @router.post("/", response_model=SingleProductResponse)
 async def create_product(
     body: ProductCreateRequest,
-    current_user: dict = Depends(get_current_user_token),
+    current_admin: dict = Depends(get_current_admin_token),
 ) -> SingleProductResponse:
     """
     Create a new product.
-    Requires access token authentication (Bearer token, staff only).
+    Requires access token authentication (Bearer token, admin only).
     """
     try:
         return await product_service.create_product_response(body)

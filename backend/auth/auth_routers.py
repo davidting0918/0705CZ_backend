@@ -173,17 +173,18 @@ async def get_access_token(
 ) -> AccessTokenResponse:
     """
     Get JWT access token for staff dashboard.
-    Uses OAuth2 password flow (username/password form).
+    Uses OAuth2 password flow (username=email, password).
+    Authenticates against admins table.
     """
-    user = await auth_service.authenticate_by_name(form_data.username, form_data.password)
-    if not user:
+    admin = await auth_service.authenticate_admin_by_email(form_data.username, form_data.password)
+    if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    jwt_token, _ = await auth_service.create_access_token_record(user["user_id"])
+    jwt_token, _ = await auth_service.create_access_token_record(admin["admin_id"])
 
     return AccessTokenResponse(
         access_token=jwt_token,

@@ -25,7 +25,7 @@ from backend.core.security import (
     generate_user_id,
     get_session_expiry,
     get_token_expiry,
-    hash_password,
+    hash_password_user,
     hash_token,
     verify_password,
 )
@@ -97,11 +97,28 @@ class AuthService:
 
     async def authenticate_by_name(self, name: str, password: str) -> Optional[dict]:
         """
-        Authenticate user by name and password (for staff access token).
+        Authenticate user by name and password.
         
         Returns user dict if valid, None otherwise.
         """
         return await self._authenticate_user("name", name, password)
+
+    async def authenticate_admin_by_email(self, email: str, password: str) -> Optional[dict]:
+        """
+        Authenticate admin by email and password.
+        
+        Returns admin dict if valid, None otherwise.
+        """
+        query = "SELECT * FROM admins WHERE email = $1 AND is_active = TRUE"
+        admin = await self.db.read_one(query, email)
+
+        if not admin:
+            return None
+
+        if not verify_password(password, admin["password_hash"]):
+            return None
+
+        return admin
 
     # ================== Google OAuth ==================
 
@@ -344,7 +361,7 @@ class AuthService:
             user_id = generate_user_id()
 
         # Generate a random password hash for OAuth users
-        password_hash = hash_password(f"oauth_{user_id}_{dt.now(tz.utc).timestamp()}")
+        password_hash = hash_password_user(f"oauth_{user_id}_{dt.now(tz.utc).timestamp()}")
 
         user_data = {
             "user_id": user_id,
@@ -452,24 +469,24 @@ class AuthService:
 
     # ================== Access Token Management ==================
 
-    async def create_access_token_record(self, user_id: str) -> tuple[str, AccessTokenData]:
+    async def create_access_token_record(self, admin_id: str) -> tuple[str, AccessTokenData]:
         """
         Create a JWT access token and store hash in database.
         
         Returns (jwt_token, token_data) tuple.
         """
-        jwt_token = create_access_token(user_id)
+        jwt_token = create_access_token(admin_id)
         token_hash = hash_token(jwt_token)
         expires_at = get_token_expiry()
 
         token_data = AccessTokenData(
-            user_id=user_id,
+            admin_id=admin_id,
             token_hash=token_hash,
             expires_at=expires_at,
         )
 
         await self.db.insert_one("access_tokens", {
-            "user_id": token_data.user_id,
+            "admin_id": token_data.admin_id,
             "token_hash": token_data.token_hash,
             "expires_at": token_data.expires_at,
         })
@@ -478,28 +495,28 @@ class AuthService:
 
     async def validate_access_token(self, token: str) -> Optional[dict]:
         """
-        Validate JWT access token and return user if valid.
+        Validate JWT access token and return admin if valid.
         """
         # First decode JWT
         payload = decode_access_token(token)
         if not payload:
             return None
 
-        user_id = payload.get("sub")
-        if not user_id:
+        admin_id = payload.get("sub")
+        if not admin_id:
             return None
 
         # Verify token exists in database and not expired
         token_hash = hash_token(token)
         query = """
-            SELECT u.* FROM access_tokens t
-            JOIN users u ON t.user_id = u.user_id
+            SELECT a.* FROM access_tokens t
+            JOIN admins a ON t.admin_id = a.admin_id
             WHERE t.token_hash = $1 
             AND t.expires_at > CURRENT_TIMESTAMP
-            AND u.is_active = TRUE
+            AND a.is_active = TRUE
         """
-        user = await self.db.read_one(query, token_hash)
-        return user
+        admin = await self.db.read_one(query, token_hash)
+        return admin
 
 
 # Global auth service instance
@@ -530,11 +547,11 @@ async def get_current_user_session(request: Request) -> dict:
     return user
 
 
-async def get_current_user_token(
+async def get_current_admin_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> dict:
     """
-    Dependency: Get current user from JWT access token.
+    Dependency: Get current admin from JWT access token.
     Used for staff dashboard authentication.
     """
     if not credentials:
@@ -544,12 +561,12 @@ async def get_current_user_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = await auth_service.validate_access_token(credentials.credentials)
-    if not user:
+    admin = await auth_service.validate_access_token(credentials.credentials)
+    if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return user
+    return admin

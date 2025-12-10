@@ -19,6 +19,7 @@ from backend.core.environment import env_config
 from backend.auth.auth_routers import router as auth_router
 from backend.users.user_routers import router as user_router
 from backend.products.product_routers import router as product_router
+from backend.admins.admin_routers import router as admin_router
 
 
 @asynccontextmanager
@@ -57,6 +58,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(product_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

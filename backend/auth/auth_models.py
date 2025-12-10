@@ -93,7 +93,7 @@ class SessionData(BaseModel):
 class AccessTokenData(BaseModel):
     """Access token data stored in database."""
     id: Optional[int] = None
-    user_id: str
+    admin_id: str
     token_hash: str
     expires_at: dt
     created_at: Optional[dt] = None

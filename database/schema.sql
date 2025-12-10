@@ -217,19 +217,40 @@ CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE ON sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
+-- TABLE: admins
+-- =====================================================
+CREATE TABLE admins (
+    admin_id            VARCHAR(6) NOT NULL UNIQUE PRIMARY KEY, -- random 6 digits
+    email               VARCHAR(255) NOT NULL UNIQUE,
+    name                VARCHAR(100) NOT NULL,
+    password_hash        VARCHAR(255) NOT NULL,
+    phone                VARCHAR(20),
+    photo_url            VARCHAR(500),
+    is_active            BOOLEAN DEFAULT TRUE,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_admins_email ON admins(email);
+CREATE INDEX idx_admins_created ON admins(created_at DESC);
+
+CREATE TRIGGER update_admins_updated_at BEFORE UPDATE ON admins
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
 -- TABLE: access_tokens
 -- =====================================================
 
 CREATE TABLE access_tokens (
     id                      SERIAL PRIMARY KEY,
-    user_id                 VARCHAR(6) REFERENCES users(user_id) ON DELETE SET NULL,
+    admin_id                VARCHAR(6) REFERENCES admins(admin_id) ON DELETE CASCADE,
     token_hash              VARCHAR(255) NOT NULL UNIQUE,
     expires_at              TIMESTAMPTZ NOT NULL,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_access_tokens_user ON access_tokens(user_id);
+CREATE INDEX idx_access_tokens_admin ON access_tokens(admin_id);
 CREATE INDEX idx_access_tokens_token ON access_tokens(token_hash);
 CREATE INDEX idx_access_tokens_expires ON access_tokens(expires_at);
 
