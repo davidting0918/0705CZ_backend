@@ -4,8 +4,10 @@ FastAPI Application Entry Point
 
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from scalar_fastapi import get_scalar_api_reference
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -61,4 +63,30 @@ app.include_router(product_router)
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "environment": env_config.environment.value}
+
+
+# Scalar API Documentation
+@app.get("/scalar", include_in_schema=False)
+async def scalar_html():
+    """
+    Scalar API Documentation endpoint.
+    Access at: http://localhost:8000/scalar
+    """
+    return get_scalar_api_reference(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Scalar API Documentation",
+    )
+
+
+if __name__ == "__main__":
+    # Get configuration from environment variables or use defaults
+    
+    # Run the server
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info",
+    )
 

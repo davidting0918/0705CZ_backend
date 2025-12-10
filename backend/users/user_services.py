@@ -124,7 +124,7 @@ class UserService:
             phone=request.phone,
             address=request.address,
             is_active=True,
-            is_verified=False,
+            is_verified=True,
             created_at=now,
             updated_at=now,
         )
