@@ -2,122 +2,84 @@
 Product Routers - Product API endpoints
 
 Provides endpoints for:
-- GET / - List products (api_key auth)
-- GET /{product_id} - Get product by ID (api_key auth)
+- GET / - List products (public, rate limited)
+- GET /{product_id} - Get product by ID (public, rate limited)
 - POST / - Create product (access_token auth, staff only)
 """
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from backend.auth.auth_services import get_current_user_token, verify_api_key
+from backend.auth.auth_services import get_current_user_token
 from backend.products.product_models import (
+    CategoryListResponse,
     ProductCreateRequest,
-    ProductListItemResponse,
     ProductListResponse,
-    ProductResponse,
     SingleProductResponse,
 )
 from backend.products.product_services import product_service
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/products", tags=["products"])
 
+# Rate limiter instance - uses same key_func as main.py
+limiter = Limiter(key_func=get_remote_address)
 
-# ================== API Key Protected Endpoints (Public) ==================
+
+# ================== Public Endpoints (Rate Limited) ==================
 
 @router.get("/", response_model=ProductListResponse)
+@limiter.limit("60/minute")
 async def list_products(
+    request: Request,
     category: Optional[str] = Query(None, description="Filter by category"),
     is_active: Optional[bool] = Query(True, description="Filter by active status"),
     limit: int = Query(50, ge=1, le=100, description="Number of items per page"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
-    api_key: dict = Depends(verify_api_key),
 ) -> ProductListResponse:
     """
     List products with optional filtering and pagination.
-    Requires API key authentication (X-API-Key header).
+    Public endpoint with rate limiting (60 requests per minute per IP).
     """
-    products, total = await product_service.list_products(
+    return await product_service.list_products_response(
         category=category,
         is_active=is_active,
         limit=limit,
         offset=offset,
     )
 
-    return ProductListResponse(
-        status=1,
-        message="Products retrieved",
-        data=[
-            ProductListItemResponse(
-                product_id=p["product_id"],
-                product_sku=p["product_sku"],
-                name=p["name"],
-                price=p["price"],
-                qty=p["qty"],
-                photo_url=p.get("photo_url"),
-                category=p["category"],
-                is_active=p["is_active"],
-            )
-            for p in products
-        ],
-        total=total,
-        limit=limit,
-        offset=offset,
-    )
 
-
-@router.get("/categories")
+@router.get("/categories", response_model=CategoryListResponse)
+@limiter.limit("60/minute")
 async def list_categories(
-    api_key: dict = Depends(verify_api_key),
-) -> dict:
+    request: Request,
+) -> CategoryListResponse:
     """
     Get list of product categories.
-    Requires API key authentication (X-API-Key header).
+    Public endpoint with rate limiting (60 requests per minute per IP).
     """
-    categories = await product_service.get_categories()
-    
-    return {
-        "status": 1,
-        "message": "Categories retrieved",
-        "data": categories,
-    }
+    return await product_service.get_categories_response()
 
 
 @router.get("/{product_id}", response_model=SingleProductResponse)
+@limiter.limit("60/minute")
 async def get_product(
+    request: Request,
     product_id: str,
-    api_key: dict = Depends(verify_api_key),
 ) -> SingleProductResponse:
     """
     Get product by ID.
-    Requires API key authentication (X-API-Key header).
+    Public endpoint with rate limiting (60 requests per minute per IP).
     """
-    product = await product_service.get_product_by_id(product_id)
-    if not product:
+    try:
+        return await product_service.get_product_by_id_response(product_id)
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
+            detail=str(e),
         )
-
-    return SingleProductResponse(
-        status=1,
-        message="Product retrieved",
-        data=ProductResponse(
-            product_id=product["product_id"],
-            product_sku=product["product_sku"],
-            name=product["name"],
-            description=product.get("description"),
-            currency=product["currency"],
-            price=product["price"],
-            qty=product["qty"],
-            photo_url=product.get("photo_url"),
-            category=product["category"],
-            is_active=product["is_active"],
-            created_at=product["created_at"],
-            updated_at=product["updated_at"],
-        ),
-    )
 
 
 # ================== Access Token Protected Endpoints (Staff Only) ==================
@@ -132,29 +94,10 @@ async def create_product(
     Requires access token authentication (Bearer token, staff only).
     """
     try:
-        product = await product_service.create_product(body)
+        return await product_service.create_product_response(body)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-
-    return SingleProductResponse(
-        status=1,
-        message="Product created successfully",
-        data=ProductResponse(
-            product_id=product["product_id"],
-            product_sku=product["product_sku"],
-            name=product["name"],
-            description=product.get("description"),
-            currency=product["currency"],
-            price=product["price"],
-            qty=product["qty"],
-            photo_url=product.get("photo_url"),
-            category=product["category"],
-            is_active=product["is_active"],
-            created_at=product["created_at"],
-            updated_at=product["updated_at"],
-        ),
-    )
 

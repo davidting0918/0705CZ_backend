@@ -90,6 +90,13 @@ class ProductListResponse(BaseModel):
     offset: int
 
 
+class CategoryListResponse(BaseModel):
+    """Category list response wrapper."""
+    status: int = 1
+    message: str
+    data: list[str]
+
+
 # ================== Internal Models ==================
 
 class ProductCreate(BaseModel):

@@ -1,10 +1,9 @@
 """
 Auth Services - Business logic for authentication
 
-Handles three authentication methods:
+Handles two authentication methods:
 1. Session (HTTP-only cookie) - for user website login
 2. Access Token (JWT) - for staff dashboard
-3. API Key - for frontend public endpoints
 """
 
 import os
@@ -15,7 +14,7 @@ from typing import Optional
 import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.core.db_manager import get_db
 from backend.core.security import (
@@ -41,7 +40,6 @@ load_dotenv("backend/.env")
 
 # Security schemes
 bearer_scheme = HTTPBearer(auto_error=False)
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 class AuthService:
@@ -61,14 +59,25 @@ class AuthService:
 
     # ================== Email/Password Authentication ==================
 
-    async def authenticate_by_email(self, email: str, password: str) -> Optional[dict]:
+    async def _authenticate_user(
+        self,
+        field: str,
+        value: str,
+        password: str,
+    ) -> Optional[dict]:
         """
-        Authenticate user by email and password.
+        Generic user authentication by field (email or name).
         
-        Returns user dict if valid, None otherwise.
+        Args:
+            field: Field name to query (email or name)
+            value: Field value to match
+            password: Password to verify
+            
+        Returns:
+            User dict if valid, None otherwise
         """
-        query = "SELECT * FROM users WHERE email = $1 AND is_active = TRUE"
-        user = await self.db.read_one(query, email)
+        query = f"SELECT * FROM users WHERE {field} = $1 AND is_active = TRUE"
+        user = await self.db.read_one(query, value)
 
         if not user:
             return None
@@ -77,6 +86,14 @@ class AuthService:
             return None
 
         return user
+
+    async def authenticate_by_email(self, email: str, password: str) -> Optional[dict]:
+        """
+        Authenticate user by email and password.
+        
+        Returns user dict if valid, None otherwise.
+        """
+        return await self._authenticate_user("email", email, password)
 
     async def authenticate_by_name(self, name: str, password: str) -> Optional[dict]:
         """
@@ -84,39 +101,133 @@ class AuthService:
         
         Returns user dict if valid, None otherwise.
         """
-        query = "SELECT * FROM users WHERE name = $1 AND is_active = TRUE"
-        user = await self.db.read_one(query, name)
-
-        if not user:
-            return None
-
-        if not verify_password(password, user["password_hash"]):
-            return None
-
-        return user
+        return await self._authenticate_user("name", name, password)
 
     # ================== Google OAuth ==================
 
-    async def verify_google_token(self, token: str) -> Optional[GoogleUserInfo]:
-        """Verify Google OAuth token and get user info."""
+    async def _make_http_request(
+        self,
+        method: str,
+        url: str,
+        headers: Optional[dict] = None,
+        data: Optional[dict] = None,
+    ) -> Optional[dict]:
+        """
+        Make HTTP request and return JSON response if successful.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            url: Request URL
+            headers: Optional request headers
+            data: Optional request data (for POST requests)
+            
+        Returns:
+            JSON response dict if successful, None otherwise
+        """
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
+                if method.upper() == "GET":
+                    response = await client.get(url, headers=headers or {})
+                elif method.upper() == "POST":
+                    response = await client.post(url, headers=headers or {}, data=data)
+                else:
+                    return None
+                
                 if response.status_code != 200:
                     return None
                 
-                data = response.json()
-                return GoogleUserInfo(
-                    id=data["sub"],
-                    email=data["email"],
-                    name=data.get("name", data["email"]),
-                    picture=data.get("picture"),
-                )
+                return response.json()
         except Exception:
             return None
+
+    async def verify_google_token(self, token: str) -> Optional[GoogleUserInfo]:
+        """Verify Google OAuth token and get user info."""
+        data = await self._make_http_request(
+            "GET",
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        
+        if not data:
+            return None
+        
+        return GoogleUserInfo(
+            id=data["sub"],
+            email=data["email"],
+            name=data.get("name", data["email"]),
+            picture=data.get("picture"),
+        )
+
+    async def _find_or_create_oauth_user(
+        self,
+        email: str,
+        name: str,
+        photo_url: Optional[str] = None,
+        google_id: Optional[str] = None,
+        line_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Find existing user by email or create new OAuth user.
+        Updates OAuth IDs if user exists but OAuth ID is missing.
+        
+        Args:
+            email: User email
+            name: User name
+            photo_url: User photo URL
+            google_id: Google OAuth ID (optional)
+            line_id: LINE OAuth ID (optional)
+            
+        Returns:
+            User dict
+        """
+        # Try to find user by email
+        query = "SELECT * FROM users WHERE email = $1"
+        user = await self.db.read_one(query, email)
+
+        if user:
+            # Update OAuth IDs and photo if not set
+            updates = []
+            params = []
+            param_index = 1
+
+            if google_id and not user.get("google_id"):
+                updates.append(f"google_id = ${param_index}")
+                params.append(google_id)
+                param_index += 1
+                user["google_id"] = google_id
+
+            if line_id and not user.get("line_id"):
+                updates.append(f"line_id = ${param_index}")
+                params.append(line_id)
+                param_index += 1
+                user["line_id"] = line_id
+
+            if photo_url and not user.get("photo_url"):
+                updates.append(f"photo_url = ${param_index}")
+                params.append(photo_url)
+                param_index += 1
+                user["photo_url"] = photo_url
+
+            if updates:
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                update_query = f"""
+                    UPDATE users 
+                    SET {', '.join(updates)}
+                    WHERE user_id = ${param_index}
+                """
+                params.append(user["user_id"])
+                await self.db.execute(update_query, *params)
+
+            return user
+        else:
+            # Create new user
+            return await self._create_oauth_user(
+                email=email,
+                name=name,
+                photo_url=photo_url,
+                google_id=google_id,
+                line_id=line_id,
+            )
 
     async def authenticate_google_user(self, token: str) -> Optional[dict]:
         """
@@ -127,31 +238,12 @@ class AuthService:
         if not google_info:
             return None
 
-        # Try to find user by email
-        query = "SELECT * FROM users WHERE email = $1"
-        user = await self.db.read_one(query, google_info.email)
-
-        if user:
-            # Update google_id if not set
-            if not user.get("google_id"):
-                update_query = """
-                    UPDATE users 
-                    SET google_id = $1, photo_url = $2, updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = $3
-                """
-                await self.db.execute(update_query, google_info.id, google_info.picture, user["user_id"])
-                user["google_id"] = google_info.id
-                user["photo_url"] = google_info.picture
-            return user
-        else:
-            # Create new user
-            new_user = await self._create_oauth_user(
-                email=google_info.email,
-                name=google_info.name,
-                photo_url=google_info.picture,
-                google_id=google_info.id,
-            )
-            return new_user
+        return await self._find_or_create_oauth_user(
+            email=google_info.email,
+            name=google_info.name,
+            photo_url=google_info.picture,
+            google_id=google_info.id,
+        )
 
     # ================== LINE OAuth ==================
 
@@ -171,47 +263,38 @@ class AuthService:
     async def exchange_line_code(self, code: str, redirect_uri: Optional[str] = None) -> Optional[str]:
         """Exchange LINE authorization code for access token."""
         uri = redirect_uri or self.line_redirect_uri
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.line.me/oauth2/v2.1/token",
-                    data={
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "redirect_uri": uri,
-                        "client_id": self.line_client_id,
-                        "client_secret": self.line_client_secret,
-                    },
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                )
-                if response.status_code != 200:
-                    return None
-                
-                data = response.json()
-                return data.get("access_token")
-        except Exception:
-            return None
+        data = await self._make_http_request(
+            "POST",
+            "https://api.line.me/oauth2/v2.1/token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": uri,
+                "client_id": self.line_client_id,
+                "client_secret": self.line_client_secret,
+            },
+        )
+        
+        return data.get("access_token") if data else None
 
     async def get_line_user_info(self, access_token: str) -> Optional[LineUserInfo]:
         """Get LINE user profile info."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "https://api.line.me/v2/profile",
-                    headers={"Authorization": f"Bearer {access_token}"}
-                )
-                if response.status_code != 200:
-                    return None
-                
-                data = response.json()
-                return LineUserInfo(
-                    user_id=data["userId"],
-                    display_name=data["displayName"],
-                    picture_url=data.get("pictureUrl"),
-                    email=data.get("email"),
-                )
-        except Exception:
+        data = await self._make_http_request(
+            "GET",
+            "https://api.line.me/v2/profile",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        
+        if not data:
             return None
+        
+        return LineUserInfo(
+            user_id=data["userId"],
+            display_name=data["displayName"],
+            picture_url=data.get("pictureUrl"),
+            email=data.get("email"),
+        )
 
     async def authenticate_line_user(self, code: str, redirect_uri: Optional[str] = None) -> Optional[dict]:
         """
@@ -226,37 +309,22 @@ class AuthService:
         if not line_info:
             return None
 
-        # Try to find user by line_id
+        # Try to find user by line_id first
         query = "SELECT * FROM users WHERE line_id = $1"
         user = await self.db.read_one(query, line_info.user_id)
-
         if user:
             return user
 
-        # Try to find by email if available
-        if line_info.email:
-            query = "SELECT * FROM users WHERE email = $1"
-            user = await self.db.read_one(query, line_info.email)
-            if user:
-                # Update line_id
-                update_query = """
-                    UPDATE users 
-                    SET line_id = $1, photo_url = COALESCE(photo_url, $2), updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = $3
-                """
-                await self.db.execute(update_query, line_info.user_id, line_info.picture_url, user["user_id"])
-                user["line_id"] = line_info.user_id
-                return user
-
-        # Create new user (use LINE user_id as placeholder email if no email)
+        # Use email if available, otherwise create placeholder email
         email = line_info.email or f"{line_info.user_id}@line.placeholder"
-        new_user = await self._create_oauth_user(
+        
+        # Find or create user (will update line_id if user exists by email)
+        return await self._find_or_create_oauth_user(
             email=email,
             name=line_info.display_name,
             photo_url=line_info.picture_url,
             line_id=line_info.user_id,
         )
-        return new_user
 
     # ================== User Creation ==================
 
@@ -329,6 +397,33 @@ class AuthService:
         })
 
         return token, session_data
+
+    async def create_session_from_request(
+        self,
+        request: Request,
+        user_id: str,
+    ) -> str:
+        """
+        Create a session for user from FastAPI Request object.
+        Extracts IP address and user agent from request automatically.
+        
+        Args:
+            request: FastAPI Request object
+            user_id: User ID to create session for
+            
+        Returns:
+            Session token string (to be set in cookie)
+        """
+        ip_address = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        
+        token, _ = await self.create_session(
+            user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        
+        return token
 
     async def validate_session(self, token: str) -> Optional[dict]:
         """
@@ -406,21 +501,6 @@ class AuthService:
         user = await self.db.read_one(query, token_hash)
         return user
 
-    # ================== API Key Validation ==================
-
-    async def validate_api_key(self, api_key: str, api_secret: str) -> Optional[dict]:
-        """
-        Validate API key and secret.
-        
-        Returns API key info if valid.
-        """
-        query = """
-            SELECT * FROM api_keys 
-            WHERE api_key = $1 AND api_secret = $2 AND is_active = TRUE
-        """
-        key_info = await self.db.read_one(query, api_key, api_secret)
-        return key_info
-
 
 # Global auth service instance
 auth_service = AuthService()
@@ -473,34 +553,3 @@ async def get_current_user_token(
         )
 
     return user
-
-
-async def verify_api_key(api_key_value: Optional[str] = Depends(api_key_header)) -> dict:
-    """
-    Dependency: Verify API key from header.
-    Used for frontend public endpoint authentication.
-    
-    Expects header format: X-API-Key: key:secret
-    """
-    if not api_key_value:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required",
-        )
-
-    if ":" not in api_key_value:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key format. Expected: key:secret",
-        )
-
-    key, secret = api_key_value.split(":", 1)
-    key_info = await auth_service.validate_api_key(key, secret)
-
-    if not key_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key or secret",
-        )
-
-    return key_info

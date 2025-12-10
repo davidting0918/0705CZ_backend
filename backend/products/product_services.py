@@ -9,9 +9,14 @@ from typing import Optional
 from backend.core.db_manager import get_db
 from backend.core.security import generate_product_id
 from backend.products.product_models import (
+    CategoryListResponse,
     ProductCreate,
     ProductCreateRequest,
+    ProductListItemResponse,
+    ProductListResponse,
+    ProductResponse,
     ProductUpdateRequest,
+    SingleProductResponse,
 )
 
 
@@ -23,12 +28,97 @@ class ProductService:
         """Get database client from global manager."""
         return get_db()
 
+    # ================== Response Builders ==================
+
+    def _build_product_response(self, product: dict) -> ProductResponse:
+        """Build ProductResponse from product dict."""
+        return ProductResponse(
+            product_id=product["product_id"],
+            product_sku=product["product_sku"],
+            name=product["name"],
+            description=product.get("description"),
+            currency=product["currency"],
+            price=product["price"],
+            qty=product["qty"],
+            photo_url=product.get("photo_url"),
+            category=product["category"],
+            is_active=product["is_active"],
+            created_at=product["created_at"],
+            updated_at=product["updated_at"],
+        )
+
+    def _build_product_list_item_response(self, product: dict) -> ProductListItemResponse:
+        """Build ProductListItemResponse from product dict."""
+        return ProductListItemResponse(
+            product_id=product["product_id"],
+            product_sku=product["product_sku"],
+            name=product["name"],
+            price=product["price"],
+            qty=product["qty"],
+            photo_url=product.get("photo_url"),
+            category=product["category"],
+            is_active=product["is_active"],
+        )
+
+    def build_single_product_response(
+        self,
+        product: dict,
+        message: str = "Product retrieved",
+    ) -> SingleProductResponse:
+        """Build complete SingleProductResponse wrapper."""
+        return SingleProductResponse(
+            status=1,
+            message=message,
+            data=self._build_product_response(product),
+        )
+
+    def build_product_list_response(
+        self,
+        products: list[dict],
+        total: int,
+        limit: int,
+        offset: int,
+        message: str = "Products retrieved",
+    ) -> ProductListResponse:
+        """Build complete ProductListResponse wrapper."""
+        return ProductListResponse(
+            status=1,
+            message=message,
+            data=[self._build_product_list_item_response(p) for p in products],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    def build_category_list_response(
+        self,
+        categories: list[str],
+        message: str = "Categories retrieved",
+    ) -> CategoryListResponse:
+        """Build complete CategoryListResponse wrapper."""
+        return CategoryListResponse(
+            status=1,
+            message=message,
+            data=categories,
+        )
+
     # ================== Product CRUD ==================
 
     async def get_product_by_id(self, product_id: str) -> Optional[dict]:
         """Get product by product_id."""
         query = "SELECT * FROM products WHERE product_id = $1"
         return await self.db.read_one(query, product_id)
+
+    async def get_product_by_id_response(self, product_id: str) -> SingleProductResponse:
+        """
+        Get product by ID and return formatted response.
+        
+        Raises ValueError if product not found.
+        """
+        product = await self.get_product_by_id(product_id)
+        if not product:
+            raise ValueError("Product not found")
+        return self.build_single_product_response(product, "Product retrieved")
 
     async def get_product_by_sku(self, product_sku: str) -> Optional[dict]:
         """Get product by SKU."""
@@ -72,6 +162,15 @@ class ProductService:
 
         # Return created product
         return await self.get_product_by_id(product_id)
+
+    async def create_product_response(self, request: ProductCreateRequest) -> SingleProductResponse:
+        """
+        Create a new product and return formatted response.
+        
+        Raises ValueError if SKU already exists.
+        """
+        product = await self.create_product(request)
+        return self.build_single_product_response(product, "Product created successfully")
 
     async def update_product(
         self,
@@ -200,6 +299,19 @@ class ProductService:
 
         return products, total
 
+    async def list_products_response(
+        self,
+        category: Optional[str] = None,
+        is_active: Optional[bool] = True,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> ProductListResponse:
+        """
+        List products with filtering and pagination, returning formatted response.
+        """
+        products, total = await self.list_products(category, is_active, limit, offset)
+        return self.build_product_list_response(products, total, limit, offset, "Products retrieved")
+
     async def get_categories(self) -> list[str]:
         """Get list of unique product categories."""
         query = """
@@ -210,6 +322,11 @@ class ProductService:
         """
         results = await self.db.read(query)
         return [r["category"] for r in results]
+
+    async def get_categories_response(self) -> CategoryListResponse:
+        """Get list of unique product categories, returning formatted response."""
+        categories = await self.get_categories()
+        return self.build_category_list_response(categories, "Categories retrieved")
 
 
 # Global product service instance

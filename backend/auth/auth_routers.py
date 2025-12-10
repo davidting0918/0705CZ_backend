@@ -11,7 +11,6 @@ import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from backend.core.security import ACCESS_TOKEN_EXPIRE_MINUTES, SESSION_COOKIE_NAME
@@ -27,6 +26,62 @@ from backend.auth.auth_models import (
 from backend.auth.auth_services import auth_service, get_current_user_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ================== Helper Functions ==================
+
+def set_session_cookie(response: Response, token: str) -> None:
+    """
+    Set HTTP-only session cookie on response.
+    
+    Args:
+        response: FastAPI Response object
+        token: Session token to set
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=True,  # Set to True in production (HTTPS)
+        samesite="lax",
+        max_age=7 * 24 * 60 * 60,  # 7 days
+    )
+
+
+def build_user_response(user: dict) -> UserResponse:
+    """
+    Build UserResponse from user dict.
+    
+    Args:
+        user: User dictionary from database
+        
+    Returns:
+        UserResponse object
+    """
+    return UserResponse(
+        user_id=user["user_id"],
+        email=user["email"],
+        name=user["name"],
+        photo_url=user.get("photo_url"),
+    )
+
+
+def build_session_login_response(user: dict, message: str = "Login successful") -> SessionLoginResponse:
+    """
+    Build SessionLoginResponse from user dict.
+    
+    Args:
+        user: User dictionary from database
+        message: Success message
+        
+    Returns:
+        SessionLoginResponse object
+    """
+    return SessionLoginResponse(
+        status=1,
+        message=message,
+        data=build_user_response(user),
+    )
 
 
 # ================== Session-Based Authentication (User Website) ==================
@@ -48,35 +103,9 @@ async def email_login(
             detail="Incorrect email or password",
         )
 
-    # Create session
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    token, _ = await auth_service.create_session(
-        user_id=user["user_id"],
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-
-    # Set HTTP-only cookie
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=True,  # Set to True in production (HTTPS)
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,  # 7 days
-    )
-
-    return SessionLoginResponse(
-        status=1,
-        message="Login successful",
-        data=UserResponse(
-            user_id=user["user_id"],
-            email=user["email"],
-            name=user["name"],
-            photo_url=user.get("photo_url"),
-        ),
-    )
+    token = await auth_service.create_session_from_request(request, user["user_id"])
+    set_session_cookie(response, token)
+    return build_session_login_response(user, "Login successful")
 
 
 @router.post("/google/login", response_model=SessionLoginResponse)
@@ -96,35 +125,9 @@ async def google_login(
             detail="Invalid Google authorization",
         )
 
-    # Create session
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    token, _ = await auth_service.create_session(
-        user_id=user["user_id"],
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-
-    # Set HTTP-only cookie
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-    )
-
-    return SessionLoginResponse(
-        status=1,
-        message="Google login successful",
-        data=UserResponse(
-            user_id=user["user_id"],
-            email=user["email"],
-            name=user["name"],
-            photo_url=user.get("photo_url"),
-        ),
-    )
+    token = await auth_service.create_session_from_request(request, user["user_id"])
+    set_session_cookie(response, token)
+    return build_session_login_response(user, "Google login successful")
 
 
 @router.post("/line/login", response_model=LineLoginResponse)
@@ -157,35 +160,9 @@ async def line_login_callback(
             detail="LINE authentication failed",
         )
 
-    # Create session
-    ip_address = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-    token, _ = await auth_service.create_session(
-        user_id=user["user_id"],
-        ip_address=ip_address,
-        user_agent=user_agent,
-    )
-
-    # Set HTTP-only cookie
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-    )
-
-    return SessionLoginResponse(
-        status=1,
-        message="LINE login successful",
-        data=UserResponse(
-            user_id=user["user_id"],
-            email=user["email"],
-            name=user["name"],
-            photo_url=user.get("photo_url"),
-        ),
-    )
+    token = await auth_service.create_session_from_request(request, user["user_id"])
+    set_session_cookie(response, token)
+    return build_session_login_response(user, "LINE login successful")
 
 
 # ================== Access Token (Staff Dashboard) ==================

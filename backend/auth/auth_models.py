@@ -30,12 +30,6 @@ class LineLoginRequest(BaseModel):
     redirect_uri: Optional[str] = None
 
 
-class AccessTokenRequest(BaseModel):
-    """Staff access token request (username/password form)."""
-    username: str
-    password: str
-
-
 # ================== Response Models ==================
 
 class UserResponse(BaseModel):
@@ -102,16 +96,5 @@ class AccessTokenData(BaseModel):
     user_id: str
     token_hash: str
     expires_at: dt
-    created_at: Optional[dt] = None
-    updated_at: Optional[dt] = None
-
-
-class APIKeyData(BaseModel):
-    """API key data from database."""
-    id: int
-    name: str
-    api_key: str
-    api_secret: str
-    is_active: bool = True
     created_at: Optional[dt] = None
     updated_at: Optional[dt] = None

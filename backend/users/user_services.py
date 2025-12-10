@@ -8,7 +8,14 @@ from typing import Optional
 
 from backend.core.db_manager import get_db
 from backend.core.security import generate_user_id, hash_password
-from backend.users.user_models import UserCreate, UserRegisterRequest, UserUpdateRequest
+from backend.users.user_models import (
+    UserCreate,
+    UserProfileResponse,
+    UserPublicResponse,
+    UserRegisterRequest,
+    UserResponse,
+    UserUpdateRequest,
+)
 
 
 class UserService:
@@ -19,12 +26,72 @@ class UserService:
         """Get database client from global manager."""
         return get_db()
 
+    # ================== Response Builders ==================
+
+    def _build_user_profile_response(self, user: dict) -> UserProfileResponse:
+        """Build UserProfileResponse from user dict."""
+        return UserProfileResponse(
+            user_id=user["user_id"],
+            email=user["email"],
+            name=user["name"],
+            phone=user.get("phone"),
+            address=user.get("address"),
+            photo_url=user.get("photo_url"),
+            is_active=user["is_active"],
+            is_verified=user["is_verified"],
+            created_at=user["created_at"],
+            updated_at=user["updated_at"],
+        )
+
+    def _build_user_public_response(self, user: dict) -> UserPublicResponse:
+        """Build UserPublicResponse from user dict."""
+        return UserPublicResponse(
+            user_id=user["user_id"],
+            name=user["name"],
+            photo_url=user.get("photo_url"),
+        )
+
+    def build_user_response(
+        self,
+        user: dict,
+        message: str = "User retrieved",
+    ) -> UserResponse:
+        """Build complete UserResponse wrapper."""
+        return UserResponse(
+            status=1,
+            message=message,
+            data=self._build_user_profile_response(user),
+        )
+
+    def build_user_public_dict(
+        self,
+        user: dict,
+        message: str = "User retrieved",
+    ) -> dict:
+        """Build public user response as dict (for rate-limited endpoints)."""
+        return {
+            "status": 1,
+            "message": message,
+            "data": self._build_user_public_response(user).model_dump(),
+        }
+
     # ================== User CRUD ==================
 
     async def get_user_by_id(self, user_id: str) -> Optional[dict]:
         """Get user by user_id."""
         query = "SELECT * FROM users WHERE user_id = $1 AND is_active = TRUE"
         return await self.db.read_one(query, user_id)
+
+    async def get_user_by_id_response(self, user_id: str) -> dict:
+        """
+        Get user by ID and return formatted response.
+        
+        Raises ValueError if user not found.
+        """
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+        return self.build_user_public_dict(user, "User retrieved")
 
     async def get_user_by_email(self, email: str) -> Optional[dict]:
         """Get user by email."""
@@ -66,6 +133,19 @@ class UserService:
 
         # Return created user (without password_hash)
         return await self.get_user_by_id(user_id)
+
+    async def create_user_response(self, request: UserRegisterRequest) -> UserResponse:
+        """
+        Create a new user and return formatted response.
+        
+        Raises ValueError if email already exists.
+        """
+        user = await self.create_user(request)
+        return self.build_user_response(user, "User registered successfully")
+
+    def build_user_profile_from_dict(self, user_dict: dict) -> UserResponse:
+        """Build UserResponse from user dict (for authenticated endpoints)."""
+        return self.build_user_response(user_dict, "User profile retrieved")
 
     async def update_user(self, user_id: str, request: UserUpdateRequest) -> Optional[dict]:
         """Update user profile."""
