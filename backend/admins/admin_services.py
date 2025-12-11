@@ -34,6 +34,7 @@ class AdminService:
             admin_id=admin["admin_id"],
             email=admin["email"],
             name=admin["name"],
+            google_id=admin.get("google_id"),
             phone=admin.get("phone"),
             photo_url=admin.get("photo_url"),
             is_active=admin["is_active"],
@@ -95,6 +96,11 @@ class AdminService:
         """Get admin by email."""
         query = "SELECT * FROM admins WHERE email = $1"
         return await self.db.read_one(query, email)
+
+    async def get_admin_by_google_id(self, google_id: str) -> Optional[dict]:
+        """Get admin by google_id."""
+        query = "SELECT * FROM admins WHERE google_id = $1 AND is_active = TRUE"
+        return await self.db.read_one(query, google_id)
 
     async def create_admin(self, request: AdminRegisterRequest) -> dict:
         """
@@ -219,6 +225,123 @@ class AdminService:
         """Check if email is available for registration."""
         existing = await self.get_admin_by_email(email)
         return existing is None
+
+    # ================== Google OAuth Admin Management ==================
+
+    async def _find_or_create_admin_google(
+        self,
+        email: str,
+        name: str,
+        google_id: str,
+        photo_url: Optional[str] = None,
+    ) -> dict:
+        """
+        Find existing admin by google_id or email, or create new admin from Google OAuth.
+        Updates google_id and photo_url if admin exists but OAuth ID is missing.
+        
+        Args:
+            email: Admin email from Google
+            name: Admin name from Google
+            google_id: Google OAuth ID
+            photo_url: Admin photo URL from Google (optional)
+            
+        Returns:
+            Admin dict
+        """
+        # Try to find admin by google_id first
+        admin = await self.get_admin_by_google_id(google_id)
+        if admin:
+            # Update photo_url if not set and provided
+            if photo_url and not admin.get("photo_url"):
+                await self.db.execute(
+                    "UPDATE admins SET photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE admin_id = $2",
+                    photo_url,
+                    admin["admin_id"],
+                )
+                admin["photo_url"] = photo_url
+            return admin
+
+        # Try to find admin by email
+        admin = await self.get_admin_by_email(email)
+        if admin:
+            # Update google_id and photo_url if not set
+            updates = []
+            params = []
+            param_index = 1
+
+            if not admin.get("google_id"):
+                updates.append(f"google_id = ${param_index}")
+                params.append(google_id)
+                param_index += 1
+                admin["google_id"] = google_id
+
+            if photo_url and not admin.get("photo_url"):
+                updates.append(f"photo_url = ${param_index}")
+                params.append(photo_url)
+                param_index += 1
+                admin["photo_url"] = photo_url
+
+            if updates:
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                update_query = f"""
+                    UPDATE admins 
+                    SET {', '.join(updates)}
+                    WHERE admin_id = ${param_index}
+                """
+                params.append(admin["admin_id"])
+                await self.db.execute(update_query, *params)
+
+            return admin
+        else:
+            # Create new admin
+            return await self._create_admin_google(
+                email=email,
+                name=name,
+                google_id=google_id,
+                photo_url=photo_url,
+            )
+
+    async def _create_admin_google(
+        self,
+        email: str,
+        name: str,
+        google_id: str,
+        photo_url: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a new admin from Google OAuth login.
+        
+        Args:
+            email: Admin email from Google
+            name: Admin name from Google
+            google_id: Google OAuth ID
+            photo_url: Admin photo URL from Google (optional)
+            
+        Returns:
+            Admin dict
+        """
+        admin_id = generate_admin_id()
+        while await self.db.read_one("SELECT 1 FROM admins WHERE admin_id = $1", admin_id):
+            admin_id = generate_admin_id()
+
+        now = dt.now(tz.utc)
+        admin_data = AdminCreate(
+            admin_id=admin_id,
+            email=email,
+            name=name,
+            password_hash=None,  # No password for Google OAuth admins
+            google_id=google_id,
+            phone=None,
+            photo_url=photo_url,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        await self.db.insert_one("admins", admin_data.model_dump())
+
+        # Return created admin
+        return await self.get_admin_by_id(admin_id)
 
 
 # Global admin service instance

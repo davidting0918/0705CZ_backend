@@ -26,6 +26,11 @@ class AdminUpdateRequest(BaseModel):
     photo_url: Optional[str] = None
 
 
+class AdminGoogleLoginRequest(BaseModel):
+    """Admin Google OAuth login request body."""
+    token: str
+
+
 # ================== Response Models ==================
 
 class AdminPublicResponse(BaseModel):
@@ -40,6 +45,7 @@ class AdminProfileResponse(BaseModel):
     admin_id: str
     email: str
     name: str
+    google_id: Optional[str] = None
     phone: Optional[str] = None
     photo_url: Optional[str] = None
     is_active: bool
@@ -69,7 +75,8 @@ class AdminCreate(BaseModel):
     admin_id: str
     email: str
     name: str
-    password_hash: str
+    password_hash: Optional[str] = None
+    google_id: Optional[str] = None
     phone: Optional[str] = None
     photo_url: Optional[str] = None
     is_active: bool = True

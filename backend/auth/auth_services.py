@@ -35,6 +35,8 @@ from backend.auth.auth_models import (
     LineUserInfo,
     SessionData,
 )
+from backend.admins.admin_whitelist_service import admin_whitelist_service
+from backend.admins.admin_services import admin_service
 
 load_dotenv("backend/.env")
 
@@ -106,8 +108,17 @@ class AuthService:
     async def authenticate_admin_by_email(self, email: str, password: str) -> Optional[dict]:
         """
         Authenticate admin by email and password.
+        Checks email whitelist after successful password verification.
         
-        Returns admin dict if valid, None otherwise.
+        Args:
+            email: Admin email address
+            password: Admin password
+            
+        Returns:
+            Admin dict if valid and whitelisted, None otherwise
+            
+        Raises:
+            HTTPException: If email is not whitelisted (403)
         """
         query = "SELECT * FROM admins WHERE email = $1 AND is_active = TRUE"
         admin = await self.db.read_one(query, email)
@@ -115,8 +126,16 @@ class AuthService:
         if not admin:
             return None
 
-        if not verify_password(password, admin["password_hash"]):
+        if not admin.get("password_hash") or not verify_password(password, admin["password_hash"]):
             return None
+
+        # Check if email is whitelisted
+        is_whitelisted = await admin_whitelist_service.check_email_whitelisted(email)
+        if not is_whitelisted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email is not whitelisted for admin access",
+            )
 
         return admin
 
@@ -260,6 +279,41 @@ class AuthService:
             name=google_info.name,
             photo_url=google_info.picture,
             google_id=google_info.id,
+        )
+
+    async def authenticate_admin_google(self, token: str) -> Optional[dict]:
+        """
+        Authenticate admin via Google OAuth.
+        Checks email whitelist, creates admin if not exists, updates google_id if needed.
+        
+        Args:
+            token: Google OAuth token
+            
+        Returns:
+            Admin dict if authentication successful and email is whitelisted, None otherwise
+            
+        Raises:
+            HTTPException: If email is not whitelisted (403) or Google token is invalid (401)
+        """
+        # Verify Google token
+        google_info = await self.verify_google_token(token)
+        if not google_info:
+            return None
+
+        # Check if email is whitelisted
+        is_whitelisted = await admin_whitelist_service.check_email_whitelisted(google_info.email)
+        if not is_whitelisted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email is not whitelisted for admin access",
+            )
+
+        # Find or create admin
+        return await admin_service._find_or_create_admin_google(
+            email=google_info.email,
+            name=google_info.name,
+            google_id=google_info.id,
+            photo_url=google_info.picture,
         )
 
     # ================== LINE OAuth ==================

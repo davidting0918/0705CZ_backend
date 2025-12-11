@@ -223,7 +223,8 @@ CREATE TABLE admins (
     admin_id            VARCHAR(6) NOT NULL UNIQUE PRIMARY KEY, -- random 6 digits
     email               VARCHAR(255) NOT NULL UNIQUE,
     name                VARCHAR(100) NOT NULL,
-    password_hash        VARCHAR(255) NOT NULL,
+    password_hash        VARCHAR(255),
+    google_id           VARCHAR(255) UNIQUE,
     phone                VARCHAR(20),
     photo_url            VARCHAR(500),
     is_active            BOOLEAN DEFAULT TRUE,
@@ -232,6 +233,7 @@ CREATE TABLE admins (
 );
 
 CREATE INDEX idx_admins_email ON admins(email);
+CREATE INDEX idx_admins_google_id ON admins(google_id);
 CREATE INDEX idx_admins_created ON admins(created_at DESC);
 
 CREATE TRIGGER update_admins_updated_at BEFORE UPDATE ON admins
@@ -273,4 +275,20 @@ CREATE TABLE api_keys (
 );
 
 CREATE TRIGGER update_api_keys_updated_at BEFORE UPDATE ON api_keys
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- TABLE: admin_whitelist
+-- =====================================================
+
+CREATE TABLE admin_whitelist (
+    id              SERIAL PRIMARY KEY,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_admin_whitelist_email ON admin_whitelist(email);
+
+CREATE TRIGGER update_admin_whitelist_updated_at BEFORE UPDATE ON admin_whitelist
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

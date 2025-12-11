@@ -3,7 +3,7 @@ Auth Routers - Authentication API endpoints
 
 Provides endpoints for:
 1. Session-based login (email, Google, LINE) - for user website
-2. Access token generation - for staff dashboard
+2. Access token generation (email/password, Google) - for admin dashboard
 3. Logout
 """
 
@@ -24,6 +24,7 @@ from backend.auth.auth_models import (
     UserResponse,
 )
 from backend.auth.auth_services import auth_service, get_current_user_session
+from backend.admins.admin_models import AdminGoogleLoginRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -108,14 +109,15 @@ async def email_login(
     return build_session_login_response(user, "Login successful")
 
 
-@router.post("/google/login", response_model=SessionLoginResponse)
-async def google_login(
+@router.post("/google/user/login", response_model=SessionLoginResponse)
+async def google_user_login(
     request: Request,
     response: Response,
     body: GoogleLoginRequest,
 ) -> SessionLoginResponse:
     """
-    Login with Google OAuth token.
+    User Google OAuth login endpoint.
+    Authenticates user via Google OAuth token and returns session cookie.
     Creates or finds user, creates session, sets HTTP-only cookie.
     """
     user = await auth_service.authenticate_google_user(body.token)
@@ -128,6 +130,36 @@ async def google_login(
     token = await auth_service.create_session_from_request(request, user["user_id"])
     set_session_cookie(response, token)
     return build_session_login_response(user, "Google login successful")
+
+
+@router.post("/google/admin/login", response_model=AccessTokenResponse)
+async def google_admin_login(
+    body: AdminGoogleLoginRequest,
+) -> AccessTokenResponse:
+    """
+    Admin Google OAuth login endpoint.
+    Authenticates admin via Google OAuth token and returns JWT access token.
+    
+    Only emails in the admin whitelist can successfully login.
+    Returns 403 Forbidden if email is not whitelisted.
+    Returns 401 Unauthorized if Google token is invalid.
+    """
+    admin = await auth_service.authenticate_admin_google(body.token)
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google authorization",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    jwt_token, _ = await auth_service.create_access_token_record(admin["admin_id"])
+
+    return AccessTokenResponse(
+        access_token=jwt_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        message="Admin Google login successful",
+    )
 
 
 @router.post("/line/login", response_model=LineLoginResponse)
@@ -172,9 +204,13 @@ async def get_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> AccessTokenResponse:
     """
-    Get JWT access token for staff dashboard.
+    Get JWT access token for admin dashboard.
     Uses OAuth2 password flow (username=email, password).
     Authenticates against admins table.
+    
+    Requires email to be whitelisted in admin_whitelist table.
+    Returns 403 Forbidden if email is not whitelisted.
+    Returns 401 Unauthorized if email/password is incorrect.
     """
     admin = await auth_service.authenticate_admin_by_email(form_data.username, form_data.password)
     if not admin:
