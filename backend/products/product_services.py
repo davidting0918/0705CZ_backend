@@ -15,7 +15,6 @@ from backend.products.product_models import (
     ProductListItemResponse,
     ProductListResponse,
     ProductResponse,
-    ProductUpdateRequest,
     SingleProductResponse,
 )
 
@@ -171,79 +170,6 @@ class ProductService:
         """
         product = await self.create_product(request)
         return self.build_single_product_response(product, "Product created successfully")
-
-    async def update_product(
-        self,
-        product_id: str,
-        request: ProductUpdateRequest,
-    ) -> Optional[dict]:
-        """Update product details."""
-        # Build update query dynamically based on provided fields
-        updates = []
-        values = []
-        param_count = 0
-
-        if request.name is not None:
-            param_count += 1
-            updates.append(f"name = ${param_count}")
-            values.append(request.name)
-
-        if request.description is not None:
-            param_count += 1
-            updates.append(f"description = ${param_count}")
-            values.append(request.description)
-
-        if request.currency is not None:
-            param_count += 1
-            updates.append(f"currency = ${param_count}")
-            values.append(request.currency)
-
-        if request.price is not None:
-            param_count += 1
-            updates.append(f"price = ${param_count}")
-            values.append(request.price)
-
-        if request.qty is not None:
-            param_count += 1
-            updates.append(f"qty = ${param_count}")
-            values.append(request.qty)
-
-        if request.photo_url is not None:
-            param_count += 1
-            updates.append(f"photo_url = ${param_count}")
-            values.append(request.photo_url)
-
-        if request.category is not None:
-            param_count += 1
-            updates.append(f"category = ${param_count}")
-            values.append(request.category)
-
-        if request.is_active is not None:
-            param_count += 1
-            updates.append(f"is_active = ${param_count}")
-            values.append(request.is_active)
-
-        if not updates:
-            return await self.get_product_by_id(product_id)
-
-        # Add updated_at
-        param_count += 1
-        updates.append(f"updated_at = ${param_count}")
-        values.append(dt.now(tz.utc))
-
-        # Add product_id for WHERE clause
-        param_count += 1
-        values.append(product_id)
-
-        query = f"""
-            UPDATE products 
-            SET {', '.join(updates)}
-            WHERE product_id = ${param_count}
-            RETURNING *
-        """
-
-        result = await self.db.execute_returning(query, *values)
-        return result
 
     async def list_products(
         self,

@@ -97,14 +97,6 @@ class AuthService:
         """
         return await self._authenticate_user("email", email, password)
 
-    async def authenticate_by_name(self, name: str, password: str) -> Optional[dict]:
-        """
-        Authenticate user by name and password.
-        
-        Returns user dict if valid, None otherwise.
-        """
-        return await self._authenticate_user("name", name, password)
-
     async def authenticate_admin_by_email(self, email: str, password: str) -> Optional[dict]:
         """
         Authenticate admin by email and password.

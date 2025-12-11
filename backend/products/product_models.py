@@ -23,26 +23,6 @@ class ProductCreateRequest(BaseModel):
     is_active: bool = True
 
 
-class ProductUpdateRequest(BaseModel):
-    """Product update request body (staff only)."""
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    currency: Optional[str] = Field(None, max_length=3)
-    price: Optional[float] = Field(None, ge=0)
-    qty: Optional[int] = Field(None, ge=0)
-    photo_url: Optional[str] = None
-    category: Optional[str] = Field(None, min_length=1, max_length=100)
-    is_active: Optional[bool] = None
-
-
-class ProductListQuery(BaseModel):
-    """Query parameters for product listing."""
-    category: Optional[str] = None
-    is_active: Optional[bool] = True
-    limit: int = Field(default=50, ge=1, le=100)
-    offset: int = Field(default=0, ge=0)
-
-
 # ================== Response Models ==================
 
 class ProductResponse(BaseModel):

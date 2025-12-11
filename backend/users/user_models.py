@@ -19,14 +19,6 @@ class UserRegisterRequest(BaseModel):
     address: Optional[str] = None
 
 
-class UserUpdateRequest(BaseModel):
-    """User update request body."""
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    photo_url: Optional[str] = None
-
-
 # ================== Response Models ==================
 
 class UserPublicResponse(BaseModel):
@@ -55,14 +47,6 @@ class UserResponse(BaseModel):
     status: int = 1
     message: str
     data: UserProfileResponse
-
-
-class UserListResponse(BaseModel):
-    """User list response wrapper."""
-    status: int = 1
-    message: str
-    data: list[UserPublicResponse]
-    total: int
 
 
 # ================== Internal Models ==================

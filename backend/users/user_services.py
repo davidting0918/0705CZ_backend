@@ -14,7 +14,6 @@ from backend.users.user_models import (
     UserPublicResponse,
     UserRegisterRequest,
     UserResponse,
-    UserUpdateRequest,
 )
 
 
@@ -146,87 +145,6 @@ class UserService:
     def build_user_profile_from_dict(self, user_dict: dict) -> UserResponse:
         """Build UserResponse from user dict (for authenticated endpoints)."""
         return self.build_user_response(user_dict, "User profile retrieved")
-
-    async def update_user(self, user_id: str, request: UserUpdateRequest) -> Optional[dict]:
-        """Update user profile."""
-        # Build update query dynamically based on provided fields
-        updates = []
-        values = []
-        param_count = 0
-
-        if request.name is not None:
-            param_count += 1
-            updates.append(f"name = ${param_count}")
-            values.append(request.name)
-
-        if request.phone is not None:
-            param_count += 1
-            updates.append(f"phone = ${param_count}")
-            values.append(request.phone)
-
-        if request.address is not None:
-            param_count += 1
-            updates.append(f"address = ${param_count}")
-            values.append(request.address)
-
-        if request.photo_url is not None:
-            param_count += 1
-            updates.append(f"photo_url = ${param_count}")
-            values.append(request.photo_url)
-
-        if not updates:
-            return await self.get_user_by_id(user_id)
-
-        # Add updated_at
-        param_count += 1
-        updates.append(f"updated_at = ${param_count}")
-        values.append(dt.now(tz.utc))
-
-        # Add user_id for WHERE clause
-        param_count += 1
-        values.append(user_id)
-
-        query = f"""
-            UPDATE users 
-            SET {', '.join(updates)}
-            WHERE user_id = ${param_count}
-            RETURNING *
-        """
-
-        result = await self.db.execute_returning(query, *values)
-        return result
-
-    async def list_users(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> tuple[list[dict], int]:
-        """
-        List users with pagination.
-        
-        Returns (users, total_count) tuple.
-        """
-        # Get total count
-        count_query = "SELECT COUNT(*) as count FROM users WHERE is_active = TRUE"
-        count_result = await self.db.read_one(count_query)
-        total = count_result["count"] if count_result else 0
-
-        # Get users
-        query = """
-            SELECT user_id, name, photo_url
-            FROM users 
-            WHERE is_active = TRUE
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
-        """
-        users = await self.db.read(query, limit, offset)
-
-        return users, total
-
-    async def check_email_available(self, email: str) -> bool:
-        """Check if email is available for registration."""
-        existing = await self.get_user_by_email(email)
-        return existing is None
 
 
 # Global user service instance

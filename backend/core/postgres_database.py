@@ -39,10 +39,6 @@ class PostgresAsyncClient:
         self._pool: Optional[Pool] = None
         self._initializing = False  # Flag to prevent concurrent initialization
 
-    @classmethod
-    def get_instance(cls, environment: Optional[str] = None):
-        return cls(environment)
-
     async def init_pool(self):
         """Initialize connection pool (thread-safe)"""
         if self._pool or self._initializing:

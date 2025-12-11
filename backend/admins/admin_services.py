@@ -194,38 +194,6 @@ class AdminService:
         result = await self.db.execute_returning(query, *values)
         return result
 
-    async def list_admins(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> tuple[list[dict], int]:
-        """
-        List admins with pagination.
-        
-        Returns (admins, total_count) tuple.
-        """
-        # Get total count
-        count_query = "SELECT COUNT(*) as count FROM admins WHERE is_active = TRUE"
-        count_result = await self.db.read_one(count_query)
-        total = count_result["count"] if count_result else 0
-
-        # Get admins
-        query = """
-            SELECT admin_id, name, photo_url
-            FROM admins 
-            WHERE is_active = TRUE
-            ORDER BY created_at DESC
-            LIMIT $1 OFFSET $2
-        """
-        admins = await self.db.read(query, limit, offset)
-
-        return admins, total
-
-    async def check_email_available(self, email: str) -> bool:
-        """Check if email is available for registration."""
-        existing = await self.get_admin_by_email(email)
-        return existing is None
-
     # ================== Google OAuth Admin Management ==================
 
     async def _find_or_create_admin_google(

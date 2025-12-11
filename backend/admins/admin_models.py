@@ -60,14 +60,6 @@ class AdminResponse(BaseModel):
     data: AdminProfileResponse
 
 
-class AdminListResponse(BaseModel):
-    """Admin list response wrapper."""
-    status: int = 1
-    message: str
-    data: list[AdminPublicResponse]
-    total: int
-
-
 # ================== Internal Models ==================
 
 class AdminCreate(BaseModel):

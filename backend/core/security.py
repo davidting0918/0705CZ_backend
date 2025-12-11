@@ -27,7 +27,6 @@ load_dotenv("backend/.env")
 # Bcrypt configuration
 BCRYPT_ROUNDS_USER = 12
 BCRYPT_ROUNDS_ADMIN = 14  # Higher security for admin accounts
-BCRYPT_ROUNDS = BCRYPT_ROUNDS_USER  # Backward compatibility
 
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
@@ -56,11 +55,6 @@ def hash_password_admin(password: str) -> str:
     salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS_ADMIN)
     hashed = bcrypt_lib.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')
-
-
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt (backward compatibility, uses user rounds)."""
-    return hash_password_user(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
