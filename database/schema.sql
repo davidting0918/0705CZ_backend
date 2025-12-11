@@ -220,7 +220,7 @@ CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE ON sessions
 -- TABLE: admins
 -- =====================================================
 CREATE TABLE admins (
-    admin_id            VARCHAR(6) NOT NULL UNIQUE PRIMARY KEY, -- random 6 digits
+    admin_id            VARCHAR(6) NOT NULL UNIQUE PRIMARY KEY, -- random 3 digits
     email               VARCHAR(255) NOT NULL UNIQUE,
     name                VARCHAR(100) NOT NULL,
     password_hash        VARCHAR(255),
@@ -259,23 +259,6 @@ CREATE INDEX idx_access_tokens_expires ON access_tokens(expires_at);
 CREATE TRIGGER update_access_tokens_updated_at BEFORE UPDATE ON access_tokens
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-
--- =====================================================
--- TABLE: api_keys
--- =====================================================
-
-CREATE TABLE api_keys (
-    id                  SERIAL PRIMARY KEY,
-    name                VARCHAR(100) NOT NULL,
-    api_key             VARCHAR(255) NOT NULL UNIQUE,
-    api_secret          VARCHAR(255) NOT NULL UNIQUE,
-    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER update_api_keys_updated_at BEFORE UPDATE ON api_keys
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
 -- TABLE: admin_whitelist

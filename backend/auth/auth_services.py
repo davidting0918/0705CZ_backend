@@ -14,7 +14,7 @@ from typing import Optional
 import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import OAuth2PasswordBearer
 
 from backend.core.db_manager import get_db
 from backend.core.security import (
@@ -41,7 +41,7 @@ from backend.admins.admin_services import admin_service
 load_dotenv("backend/.env")
 
 # Security schemes
-bearer_scheme = HTTPBearer(auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/access_token")
 
 
 class AuthService:
@@ -593,21 +593,12 @@ async def get_current_user_session(request: Request) -> dict:
     return user
 
 
-async def get_current_admin_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-) -> dict:
+async def get_current_admin_token(token: str = Depends(oauth2_scheme)) -> dict:
     """
     Dependency: Get current admin from JWT access token.
     Used for staff dashboard authentication.
     """
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    admin = await auth_service.validate_access_token(credentials.credentials)
+    admin = await auth_service.validate_access_token(token)
     if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

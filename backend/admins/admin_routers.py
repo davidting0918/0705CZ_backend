@@ -5,7 +5,6 @@ Provides endpoints for:
 - GET /me - Get current admin profile (access token auth)
 - POST /register - Register new admin
 - GET /{admin_id} - Get admin by ID (public, rate limited)
-- PUT /me - Update current admin profile
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -13,7 +12,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.auth.auth_services import get_current_admin_token
-from backend.admins.admin_models import AdminRegisterRequest, AdminResponse, AdminUpdateRequest
+from backend.admins.admin_models import AdminRegisterRequest, AdminResponse
 from backend.admins.admin_services import admin_service
 
 router = APIRouter(prefix="/admins", tags=["admins"])
@@ -35,41 +34,29 @@ async def get_current_admin_profile(
     return admin_service.build_admin_profile_from_dict(current_admin)
 
 
-@router.put("/me", response_model=AdminResponse)
-async def update_current_admin_profile(
-    body: AdminUpdateRequest,
-    current_admin: dict = Depends(get_current_admin_token),
-) -> AdminResponse:
-    """
-    Update current authenticated admin's profile.
-    Requires access token authentication (Bearer token).
-    """
-    try:
-        updated_admin = await admin_service.update_admin(current_admin["admin_id"], body)
-        if not updated_admin:
-            raise ValueError("Admin not found")
-        return admin_service.build_admin_response(updated_admin, "Admin profile updated successfully")
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-
-
 # ================== Public Endpoints ==================
 
 @router.post("/register", response_model=AdminResponse)
 async def register_admin(body: AdminRegisterRequest) -> AdminResponse:
     """
     Register a new admin.
-    No authentication required (for initial setup).
+    Requires email to be whitelisted in admin_whitelist table.
+    Returns 403 Forbidden if email is not whitelisted.
+    Returns 400 Bad Request if email already exists.
     """
     try:
         return await admin_service.create_admin_response(body)
     except ValueError as e:
+        error_message = str(e)
+        # Return 403 for whitelist errors, 400 for other validation errors
+        if "not whitelisted" in error_message.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=error_message,
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=error_message,
         )
 
 

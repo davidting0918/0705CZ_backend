@@ -16,6 +16,7 @@ from backend.admins.admin_models import (
     AdminResponse,
     AdminUpdateRequest,
 )
+from backend.admins.admin_whitelist_service import admin_whitelist_service
 
 
 class AdminService:
@@ -106,8 +107,13 @@ class AdminService:
         """
         Create a new admin from registration request.
         
-        Raises ValueError if email already exists.
+        Raises ValueError if email already exists or email is not whitelisted.
         """
+        # Check if email is whitelisted
+        is_whitelisted = await admin_whitelist_service.check_email_whitelisted(request.email)
+        if not is_whitelisted:
+            raise ValueError("Email is not whitelisted for admin access")
+
         # Check if email already exists
         existing = await self.get_admin_by_email(request.email)
         if existing:
@@ -287,7 +293,15 @@ class AdminService:
             
         Returns:
             Admin dict
+            
+        Raises:
+            ValueError: If email is not whitelisted
         """
+        # Defensive check: ensure email is whitelisted
+        is_whitelisted = await admin_whitelist_service.check_email_whitelisted(email)
+        if not is_whitelisted:
+            raise ValueError("Email is not whitelisted for admin access")
+
         admin_id = generate_admin_id()
         while await self.db.read_one("SELECT 1 FROM admins WHERE admin_id = $1", admin_id):
             admin_id = generate_admin_id()

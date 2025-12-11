@@ -76,10 +76,10 @@ def generate_user_id() -> str:
 
 def generate_admin_id() -> str:
     """
-    Generate a random 6-digit admin ID.
-    Format: 6 numeric characters (e.g., "123456")
+    Generate a random 3-digit admin ID.
+    Format: 3 numeric characters (e.g., "123")
     """
-    return "".join(random.choices(string.digits, k=6))
+    return "".join(random.choices(string.digits, k=3))
 
 
 def generate_product_id() -> str:

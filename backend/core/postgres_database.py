@@ -1,85 +1,163 @@
-import os
+"""
+PostgreSQL Async Database Client
+
+This module provides an async PostgreSQL client with connection pooling,
+query methods, and proper event loop handling for use across different
+execution contexts (main app, tests, etc.).
+"""
+
+import asyncio
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import asyncpg
 from asyncpg import Pool
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv("backend/.env")
+from backend.core.environment import get_database_connection_string
 
 
 class PostgresAsyncClient:
+    """Async PostgreSQL client with connection pooling."""
+
     def __init__(self, environment: Optional[str] = None):
         """
-        Initialize PostgreSQL async client with environment support
+        Initialize PostgreSQL async client with environment support.
 
         Args:
-            environment (str): Environment name (test, staging, prod).
-                              If None, auto-detect from APP_ENV or PYTEST_RUNNING
+            environment (str, optional): Environment name (test, staging, prod).
+                                        If None, auto-detect from environment variables.
         """
-        if environment is None:
-            if os.getenv("PYTEST_RUNNING") == "1":
-                environment = "test"
-            else:
-                environment = os.getenv("APP_ENV", "prod")
-
         self.environment = environment
-
-        # Get environment-specific connection string
-        if environment == "test":
-            self.connection_string = os.getenv("POSTGRES_TEST")
-        elif environment == "staging":
-            self.connection_string = os.getenv("POSTGRES_STAGING")
-        else:  # prod
-            self.connection_string = os.getenv("POSTGRES_PROD")
-
+        self.connection_string = get_database_connection_string(environment)
+        
         self._pool: Optional[Pool] = None
-        self._initializing = False  # Flag to prevent concurrent initialization
+        self._init_lock: Optional[asyncio.Lock] = None  # Lazy initialization of lock
+        self._pool_loop_id: Optional[int] = None  # Track which event loop the pool was created in
+
+    def _get_init_lock(self) -> asyncio.Lock:
+        """Get or create the initialization lock (lazy initialization)"""
+        if self._init_lock is None:
+            self._init_lock = asyncio.Lock()
+        return self._init_lock
+
+    def _is_pool_valid(self) -> bool:
+        """Check if the pool exists and is bound to the current event loop"""
+        if self._pool is None:
+            return False
+        try:
+            # Check if pool is bound to current event loop
+            current_loop = asyncio.get_running_loop()
+            current_loop_id = id(current_loop)
+            # Check if pool was created in a different event loop
+            if self._pool_loop_id is not None and self._pool_loop_id != current_loop_id:
+                return False
+            # Also check if pool is closing
+            return not self._pool.is_closing()
+        except RuntimeError:
+            # No running loop - pool might be invalid
+            return False
 
     async def init_pool(self):
-        """Initialize connection pool (thread-safe)"""
-        if self._pool or self._initializing:
+        """Initialize connection pool (async-safe, event-loop aware)"""
+        # Check if pool exists and is valid for current event loop
+        if self._is_pool_valid():
             return
 
-        self._initializing = True
-        try:
-            if not self._pool:  # Double-check after acquiring lock
-                self._pool = await asyncpg.create_pool(
-                    self.connection_string,
-                    min_size=1,
-                    max_size=50,
-                    command_timeout=60,
-                )
-        finally:
-            self._initializing = False
+        # Acquire lock to ensure only one coroutine initializes the pool
+        async with self._get_init_lock():
+            # Double-check after acquiring lock
+            if self._is_pool_valid():
+                return
+
+            # Close existing pool if it exists but is invalid
+            if self._pool is not None:
+                try:
+                    await self._pool.close()
+                except Exception:
+                    pass  # Ignore errors when closing invalid pool
+                self._pool = None
+                self._pool_loop_id = None
+
+            # Create the pool in the current event loop
+            current_loop = asyncio.get_running_loop()
+            self._pool = await asyncpg.create_pool(
+                self.connection_string,
+                min_size=1,
+                max_size=50,
+                command_timeout=60,
+                statement_cache_size=0,  # Disable statement caching to avoid InvalidCachedStatementError
+            )
+            # Store the event loop ID for validation
+            self._pool_loop_id = id(current_loop)
 
     async def close(self):
         """Close the database connection pool"""
-        if self._pool:
-            await self._pool.close()
-            self._pool = None
+        if self._init_lock:
+            async with self._get_init_lock():
+                if self._pool:
+                    await self._pool.close()
+                    self._pool = None
+                    self._pool_loop_id = None
+        else:
+            # No lock means pool was never initialized, nothing to close
+            if self._pool:
+                await self._pool.close()
+                self._pool = None
+                self._pool_loop_id = None
 
     @asynccontextmanager
     async def get_connection(self):
         """Get a database connection from the pool (auto-initializes if needed)"""
-        # Auto-initialize pool if not already done
-        if not self._pool and not self._initializing:
-            await self.init_pool()
+        # Ensure pool is initialized in current event loop
+        await self.init_pool()
 
-        # Wait for initialization if it's in progress
-        while self._initializing:
-            import asyncio
-
-            await asyncio.sleep(0.01)
-
-        if not self._pool:
+        if not self._pool or not self._is_pool_valid():
             raise RuntimeError("Failed to initialize database connection pool")
 
-        async with self._pool.acquire() as connection:
-            yield connection
+        # Acquire a connection from the pool
+        # Each call to acquire() gets a separate connection, preventing conflicts
+        try:
+            async with self._pool.acquire() as connection:
+                yield connection
+        except (RuntimeError, asyncpg.exceptions.InterfaceError) as e:
+            # If we get a "different loop" error or "another operation is in progress"
+            # due to event loop mismatch, try to recreate the pool
+            error_msg = str(e).lower()
+            if ("different loop" in error_msg or 
+                "attached to a different" in error_msg or
+                ("another operation is in progress" in error_msg and self._pool_loop_id is not None)):
+                # Check if we're actually in a different loop
+                try:
+                    current_loop_id = id(asyncio.get_running_loop())
+                    if self._pool_loop_id != current_loop_id:
+                        # Close and recreate pool in current loop
+                        async with self._get_init_lock():
+                            if self._pool:
+                                try:
+                                    await self._pool.close()
+                                except Exception:
+                                    pass
+                                self._pool = None
+                                self._pool_loop_id = None
+                            # Recreate in current loop
+                            current_loop = asyncio.get_running_loop()
+                            self._pool = await asyncpg.create_pool(
+                                self.connection_string,
+                                min_size=1,
+                                max_size=50,
+                                command_timeout=60,
+                                statement_cache_size=0,  # Disable statement caching to avoid InvalidCachedStatementError
+                            )
+                            self._pool_loop_id = id(current_loop)
+                        # Retry acquiring connection
+                        async with self._pool.acquire() as connection:
+                            yield connection
+                        return
+                except Exception:
+                    pass  # Fall through to re-raise original error
+            # Re-raise if we couldn't handle it
+            raise
 
     # ================== Data Conversion Helpers ==================
 
@@ -145,7 +223,6 @@ class PostgresAsyncClient:
                     result = dict(row)
                     return self._convert_decimals_to_floats(result)
                 return None
-
         except Exception as e:
             raise e
 
@@ -161,8 +238,6 @@ class PostgresAsyncClient:
             Any: The ID of the inserted record (if table has 'id' column), or the full inserted record
         """
         try:
-            # Convert timestamp fields automatically
-
             columns = list(data.keys())
             placeholders = [f"${i}" for i in range(1, len(columns) + 1)]
             values = list(data.values())
@@ -201,8 +276,6 @@ class PostgresAsyncClient:
         try:
             if not data:
                 return []
-
-            # Convert timestamp fields for all records
 
             # Use the first record to determine columns
             columns = list(data[0].keys())

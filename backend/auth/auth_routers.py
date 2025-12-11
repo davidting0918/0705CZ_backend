@@ -2,8 +2,8 @@
 Auth Routers - Authentication API endpoints
 
 Provides endpoints for:
-1. Session-based login (email, Google, LINE) - for user website
-2. Access token generation (email/password, Google) - for admin dashboard
+1. Session-based login (email/user, Google/user, LINE) - for user website
+2. Access token generation (email/admin, Google/admin, OAuth2) - for admin dashboard
 3. Logout
 """
 
@@ -87,14 +87,15 @@ def build_session_login_response(user: dict, message: str = "Login successful") 
 
 # ================== Session-Based Authentication (User Website) ==================
 
-@router.post("/email/login", response_model=SessionLoginResponse)
-async def email_login(
+@router.post("/email/user/login", response_model=SessionLoginResponse)
+async def email_user_login(
     request: Request,
     response: Response,
     body: EmailLoginRequest,
 ) -> SessionLoginResponse:
     """
-    Login with email and password.
+    User email login endpoint.
+    Authenticates user via email/password and returns session cookie.
     Creates a session and sets HTTP-only cookie.
     """
     user = await auth_service.authenticate_by_email(body.email, body.password)
@@ -107,6 +108,36 @@ async def email_login(
     token = await auth_service.create_session_from_request(request, user["user_id"])
     set_session_cookie(response, token)
     return build_session_login_response(user, "Login successful")
+
+
+@router.post("/email/admin/login", response_model=AccessTokenResponse)
+async def email_admin_login(
+    body: EmailLoginRequest,
+) -> AccessTokenResponse:
+    """
+    Admin email login endpoint.
+    Authenticates admin via email/password and returns JWT access token.
+    
+    Only emails in the admin whitelist can successfully login.
+    Returns 403 Forbidden if email is not whitelisted.
+    Returns 401 Unauthorized if email/password is incorrect.
+    """
+    admin = await auth_service.authenticate_admin_by_email(body.email, body.password)
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    jwt_token, _ = await auth_service.create_access_token_record(admin["admin_id"])
+
+    return AccessTokenResponse(
+        access_token=jwt_token,
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        message="Admin email login successful",
+    )
 
 
 @router.post("/google/user/login", response_model=SessionLoginResponse)
