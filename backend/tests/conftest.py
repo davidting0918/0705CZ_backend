@@ -42,6 +42,7 @@ tables = [
     "sessions",
     "admins",
     "access_tokens",
+    "admin_whitelist",
 ]
 
 
@@ -319,7 +320,7 @@ async def test_admin_data() -> Dict[str, str]:
         Dict containing admin registration information
     """
     return {
-        "email": f"admin@example.com",
+        "email": f"admin{str(uuid.uuid4())[:8]}@example.com",
         "name": f"Test Admin {str(uuid.uuid4())[:8]}",
         "password": f"TestPassword{str(uuid.uuid4())[:8]}",
     }
@@ -416,98 +417,130 @@ def assert_user_response_structure(response_data: dict) -> None:
     assert "updated_at" in data
 
 
+# ================== HELPER FUNCTIONS ==================
+
+
+async def add_admin_to_whitelist(email: str) -> None:
+    """
+    Add an email to the admin whitelist.
+    
+    Args:
+        email: Email address to add to whitelist
+    """
+    db = get_db()
+    try:
+        await db.execute(
+            "INSERT INTO admin_whitelist (email) VALUES ($1) ON CONFLICT (email) DO NOTHING",
+            email,
+        )
+    except Exception as e:
+        print(f"Warning: Error adding {email} to whitelist: {e}")
+
 # ================== SESSION-SCOPED TEST USERS (PERFORMANCE OPTIMIZED) ==================
 
 
 @pytest_asyncio.fixture(scope="session")
-async def session_users() -> Dict[str, Dict[str, str]]:
+async def session_admins(test_db) -> Dict[str, Dict[str, str]]:
     """
-    Create session-wide test users that persist across all tests.
-    This dramatically improves test performance by avoiding repeated user creation.
+    Create session-wide test admins that persist across all tests.
+    This dramatically improves test performance by avoiding repeated admin creation.
 
     Returns:
-        Dict with 'user1' and 'user2' keys containing user info and tokens
+        Dict with 'admin1' key containing admin info and access token
     """
     from httpx import AsyncClient
 
-    admin_data = [
-        {"email": "session.admin1@example.com", "name": "Session Admin 1", "pwd": "TestPassword123!", "key": "admin1"},
+    admin_configs = [
+        {"email": "session.admin1@example.com", "name": "Session Admin 1", "password": "TestPassword123!", "key": "admin1"},
     ]
 
     created_admins = {}
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-        for admin_data in admin_data:
-            print(f"Creating session admin: {admin_data['email']}")
+    # Add admins to whitelist first
+    for admin_config in admin_configs:
+        await add_admin_to_whitelist(admin_config["email"])
 
-            # Try to create user
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        for admin_config in admin_configs:
+            print(f"Creating session admin: {admin_config['email']}")
+
+            # Try to create admin
             response = await client.post(
                 "/admins/register",
                 headers={
                     "Content-Type": "application/json",
                 },
-                json={"email": admin_data["email"], "name": admin_data["name"], "pwd": admin_data["pwd"]},
+                json={"email": admin_config["email"], "name": admin_config["name"], "password": admin_config["password"]},
             )
 
             admin_created = False
-            # Handle user creation response
+            # Handle admin creation response
             if response.status_code == 200:
-                # User created successfully
+                # Admin created successfully
                 created_admin = response.json()["data"]
                 admin_created = True
-                print(f"✅ Session admin created: {admin_data['name']} (ID: {created_admin['admin_id']})")
+                admin_info = created_admin
+                print(f"✅ Session admin created: {admin_config['name']} (ID: {created_admin['admin_id']})")
             elif response.status_code == 400 and "already exists" in response.text.lower():
-                # User already exists from previous test run - this is OK
-                print(f"⚠️  Admin already exists, will use existing admin: {admin_data['email']}")
+                # Admin already exists from previous test run - fetch it
+                from backend.admins.admin_services import admin_service
+                existing_admin = await admin_service.get_admin_by_email(admin_config["email"])
+                if existing_admin:
+                    admin_info = existing_admin
+                    print(f"⚠️  Admin already exists, will use existing admin: {admin_config['email']}")
+                else:
+                    error_msg = f"Admin already exists but could not fetch: {admin_config['email']}"
+                    print(f"❌ {error_msg}")
+                    raise Exception(error_msg)
             else:
                 # Other error - fail fast
-                error_msg = f"Failed to create session admin {admin_data['name']}: {response.text}"
+                error_msg = f"Failed to create session admin {admin_config['name']}: {response.text}"
                 print(f"❌ {error_msg}")
                 raise Exception(error_msg)
 
-            # Login to get JWT token (works for both new and existing users)
+            # Login to get JWT token (works for both new and existing admins)
             login_response = await client.post(
-                "/auth/email/admin/login", json={"email": admin_data["email"], "pwd": admin_data["pwd"]}
+                "/auth/email/admin/login", json={"email": admin_config["email"], "password": admin_config["password"]}
             )
 
             if login_response.status_code != 200:
-                error_msg = f"Failed to login session admin {admin_data['name']}: {login_response.text}"
+                error_msg = f"Failed to login session admin {admin_config['name']}: {login_response.text}"
                 print(f"❌ {error_msg}")
                 raise Exception(error_msg)
 
-            token_data = login_response.json()["data"]
+            token_data = login_response.json()
+            access_token = token_data["access_token"]
 
-            # Get user info - either from creation or fetch it
-            if admin_created:
-                admin_info = created_admin
-            else:
-                # For existing users, fetch user info using the token
+            # Get admin info if not already available
+            if not admin_created:
+                # For existing admins, fetch user info using the token
                 me_response = await client.get(
                     "/admins/me",
                     headers={
-                        "Authorization": f"Bearer {token_data['access_token']}",
+                        "Authorization": f"Bearer {access_token}",
                         "Content-Type": "application/json",
                     },
                 )
                 if me_response.status_code != 200:
-                    error_msg = f"Failed to get admin info for {admin_data['name']}: {me_response.text}"
+                    error_msg = f"Failed to get admin info for {admin_config['name']}: {me_response.text}"
                     print(f"❌ {error_msg}")
                     raise Exception(error_msg)
-                user_info = me_response.json()["data"]
-                print(f"✅ Session admin ready (existing): {admin_data['name']} (ID: {admin_info['admin_id']})")
+                admin_info = me_response.json()["data"]
+                print(f"✅ Session admin ready (existing): {admin_config['name']} (ID: {admin_info['admin_id']})")
 
-            created_admins[admin_data["key"]] = {
+            created_admins[admin_config["key"]] = {
                 "admin_id": admin_info["admin_id"],
-                "email": admin_data["email"],
-                "name": admin_data["name"],
-                "pwd": admin_data["pwd"],
-                "access_token": token_data["access_token"],
+                "email": admin_config["email"],
+                "name": admin_config["name"],
+                "password": admin_config["password"],
+                "access_token": access_token,
             }
 
     yield created_admins
 
     # Cleanup after all tests (optional - database cleanup handles this)
-    print("🧹 Session users will be cleaned up by database cleanup")
+    print("🧹 Session admins will be cleaned up by database cleanup")
+
 
 @pytest_asyncio.fixture(scope="session")
 async def session_admin1(session_admins: Dict[str, Dict[str, str]]) -> Dict[str, str]:

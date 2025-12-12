@@ -9,7 +9,10 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from backend.tests.conftest import assert_admin_response_structure
+from backend.tests.conftest import (
+    add_admin_to_whitelist,
+    assert_admin_response_structure,
+)
 
 
 class TestAdminEndpointsIntegration:
@@ -31,8 +34,10 @@ class TestAdminEndpointsIntegration:
         2. Login with email/password authentication
         3. Verify admin data consistency
         """
-        # Step 1: Create admin
+        # Step 0: Add admin email to whitelist
+        await add_admin_to_whitelist(test_admin_data["email"])
 
+        # Step 1: Create admin
         create_response = await async_client.post(
             "/admins/register",
             json={
@@ -99,217 +104,193 @@ class TestAdminEndpointsIntegration:
 
         print(f"✅ Successfully created admin {admin_data['admin_id']} and authenticated")
 
-    # @pytest.mark.asyncio
-    # async def test_create_admin_without_whitelist_fails(
-    #     self, async_client: AsyncClient, test_admin_data: dict
-    # ):
-    #     """
-    #     Test that admin creation fails without whitelisted email.
-    #     """
-    #     # Attempt to create admin without whitelist
-    #     response = await async_client.post(
-    #         "/admins/register",
-    #         json={
-    #             "email": test_admin_data["email"],
-    #             "password": test_admin_data["password"],
-    #             "name": test_admin_data["name"],
-    #         },
-    #     )
+    @pytest.mark.asyncio
+    async def test_create_admin_without_whitelist_fails(
+        self, async_client: AsyncClient, test_admin_data: dict
+    ):
+        """
+        Test that admin creation fails without whitelisted email.
+        """
+        # Use a different email that's not whitelisted
+        from backend.tests.conftest import generate_test_email
+        non_whitelisted_email = generate_test_email("nonwhitelisted")
+        
+        # Attempt to create admin without whitelist
+        response = await async_client.post(
+            "/admins/register",
+            json={
+                "email": non_whitelisted_email,
+                "password": test_admin_data["password"],
+                "name": test_admin_data["name"],
+            },
+        )
 
-    #     # Should fail with 403 Forbidden
-    #     assert response.status_code == status.HTTP_403_FORBIDDEN
-    #     error_data = response.json()
-    #     assert "not whitelisted" in error_data["detail"].lower()
+        # Should fail with 403 Forbidden
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        error_data = response.json()
+        assert "not whitelisted" in error_data["detail"].lower()
 
-    # @pytest.mark.asyncio
-    # async def test_create_admin_with_invalid_email_fails(
-    #     self, async_client: AsyncClient, test_admin_data: dict
-    # ):
-    #     """
-    #     Test that admin creation fails with invalid email format.
-    #     """
-    #     await add_admin_to_whitelist("invalid-email")
+    @pytest.mark.asyncio
+    async def test_create_admin_with_invalid_email_fails(
+        self, async_client: AsyncClient, test_admin_data: dict
+    ):
+        """
+        Test that admin creation fails with invalid email format.
+        """
+        await add_admin_to_whitelist("invalid-email")
 
-    #     response = await async_client.post(
-    #         "/admins/register",
-    #         json={
-    #             "email": "invalid-email",
-    #             "password": test_admin_data["password"],
-    #             "name": test_admin_data["name"],
-    #         },
-    #     )
+        response = await async_client.post(
+            "/admins/register",
+            json={
+                "email": "invalid-email",
+                "password": test_admin_data["password"],
+                "name": test_admin_data["name"],
+            },
+        )
 
-    #     # Should fail with 422 Validation Error
-    #     assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        # Should fail with 422 Validation Error
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    # @pytest.mark.asyncio
-    # async def test_create_duplicate_admin_fails(
-    #     self, async_client: AsyncClient, test_admin_data: dict
-    # ):
-    #     """
-    #     Test that creating an admin with existing email fails.
-    #     """
-    #     email = test_admin_data["email"]
-    #     await add_admin_to_whitelist(email)
+    @pytest.mark.asyncio
+    async def test_create_duplicate_admin_fails(
+        self, async_client: AsyncClient, test_admin_data: dict
+    ):
+        """
+        Test that creating an admin with existing email fails.
+        """
+        from backend.tests.conftest import generate_test_email
+        email = generate_test_email("duplicate")
+        await add_admin_to_whitelist(email)
 
-    #     # Create first admin
-    #     first_response = await async_client.post(
-    #         "/admins/register",
-    #         json={
-    #             "email": email,
-    #             "password": test_admin_data["password"],
-    #             "name": test_admin_data["name"],
-    #         },
-    #     )
+        # Create first admin
+        first_response = await async_client.post(
+            "/admins/register",
+            json={
+                "email": email,
+                "password": test_admin_data["password"],
+                "name": test_admin_data["name"],
+            },
+        )
 
-    #     assert first_response.status_code == status.HTTP_200_OK
+        assert first_response.status_code == status.HTTP_200_OK
 
-    #     # Attempt to create admin with same email
-    #     duplicate_response = await async_client.post(
-    #         "/admins/register",
-    #         json={
-    #             "email": email,
-    #             "password": test_admin_data["password"],
-    #             "name": "Duplicate Admin",
-    #         },
-    #     )
+        # Attempt to create admin with same email
+        duplicate_response = await async_client.post(
+            "/admins/register",
+            json={
+                "email": email,
+                "password": test_admin_data["password"],
+                "name": "Duplicate Admin",
+            },
+        )
 
-    #     # Should fail with 400 Bad Request
-    #     assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
-    #     error_data = duplicate_response.json()
-    #     assert "already" in error_data["detail"].lower() or "exists" in error_data["detail"].lower()
+        # Should fail with 400 Bad Request
+        assert duplicate_response.status_code == status.HTTP_400_BAD_REQUEST
+        error_data = duplicate_response.json()
+        assert "already" in error_data["detail"].lower() or "exists" in error_data["detail"].lower()
 
-    # @pytest.mark.asyncio
-    # async def test_login_with_invalid_credentials_fails(self, async_client: AsyncClient):
-    #     """
-    #     Test that login fails with invalid credentials.
-    #     """
-    #     invalid_login_data = {"email": "nonexistent@example.com", "password": "wrongpassword"}
+    @pytest.mark.asyncio
+    async def test_login_with_invalid_credentials_fails(self, async_client: AsyncClient):
+        """
+        Test that login fails with invalid credentials.
+        """
+        invalid_login_data = {"email": "nonexistent@example.com", "password": "wrongpassword"}
 
-    #     response = await async_client.post("/auth/email/admin/login", json=invalid_login_data)
+        response = await async_client.post("/auth/email/admin/login", json=invalid_login_data)
 
-    #     # Should fail with 401 Unauthorized
-    #     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    #     error_data = response.json()
-    #     assert "incorrect email or password" in error_data["detail"].lower()
+        # Should fail with 401 Unauthorized
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        error_data = response.json()
+        assert "incorrect email or password" in error_data["detail"].lower()
 
-    # @pytest.mark.asyncio
-    # async def test_login_with_not_whitelisted_admin_fails(
-    #     self, async_client: AsyncClient, test_db
-    # ):
-    #     """
-    #     Test that login fails for admin not in whitelist.
-    #     """
-    #     # Create admin without whitelist entry
-    #     admin = await create_test_admin()
-    #     # Remove from whitelist if it was added
-    #     from backend.core.db_manager import db_manager
+    @pytest.mark.asyncio
+    async def test_login_with_not_whitelisted_admin_fails(
+        self, async_client: AsyncClient, test_db, test_admin_data
+    ):
+        """
+        Test that login fails for admin not in whitelist.
+        """
+        
+        response = await async_client.post(
+            "/auth/email/admin/login",
+            json={"email": test_admin_data["email"], "password": test_admin_data["password"]},
+        )
 
-    #     db = db_manager.get_client()
-    #     await db.execute("DELETE FROM admin_whitelist WHERE email = $1", admin["email"])
+        # Should fail with 403 Forbidden
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        error_data = response.json()
+        assert "not whitelisted" in error_data["detail"].lower()
 
-    #     response = await async_client.post(
-    #         "/auth/email/admin/login",
-    #         json={"email": admin["email"], "password": admin["password"]},
-    #     )
+    @pytest.mark.asyncio
+    async def test_get_admin_me_with_valid_token(
+        self, async_client: AsyncClient, test_db, test_helper, test_admin_data
+    ):
+        """
+        Test getting current admin profile with valid JWT token.
+        """
+        # Create admin and login to get token
+        login_response = await async_client.post(
+            "/auth/email/admin/login",
+            json={"email": test_admin_data["email"], "password": test_admin_data["password"]},
+        )
 
-    #     # Should fail with 403 Forbidden
-    #     assert response.status_code == status.HTTP_403_FORBIDDEN
-    #     error_data = response.json()
-    #     assert "not whitelisted" in error_data["detail"].lower()
+        assert login_response.status_code == status.HTTP_200_OK
+        token_data = login_response.json()
+        access_token = token_data["access_token"]
 
-    # @pytest.mark.asyncio
-    # async def test_get_admin_me_with_valid_token(
-    #     self, async_client: AsyncClient, test_db, test_helper
-    # ):
-    #     """
-    #     Test getting current admin profile with valid JWT token.
-    #     """
-    #     # Create admin and login to get token
-    #     admin = await create_test_admin()
-    #     await add_admin_to_whitelist(admin["email"])
+        # Get admin profile with token
+        response = await async_client.get(
+            "/admins/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
 
-    #     login_response = await async_client.post(
-    #         "/auth/email/admin/login",
-    #         json={"email": admin["email"], "password": admin["password"]},
-    #     )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        test_helper.assert_response_structure(data, expected_status=1)
+        assert_admin_response_structure(data)
+        assert data["data"]["admin_id"] == test_admin_data["admin_id"]
+        assert data["data"]["email"] == test_admin_data["email"]
+        assert data["data"]["name"] == test_admin_data["name"]
 
-    #     assert login_response.status_code == status.HTTP_200_OK
-    #     token_data = login_response.json()
-    #     access_token = token_data["access_token"]
+    @pytest.mark.asyncio
+    async def test_get_admin_me_without_token(self, async_client: AsyncClient):
+        """
+        Test that getting admin profile fails without token.
+        """
+        response = await async_client.get("/admins/me")
 
-    #     # Get admin profile with token
-    #     response = await async_client.get(
-    #         "/admins/me",
-    #         headers={"Authorization": f"Bearer {access_token}"},
-    #     )
+        # Should fail with 401 Unauthorized
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        error_data = response.json()
+        assert (
+            "not authenticated" in error_data["detail"].lower()
+            or "bearer" in error_data["detail"].lower()
+        )
 
-    #     assert response.status_code == status.HTTP_200_OK
-    #     data = response.json()
-    #     test_helper.assert_response_structure(data, expected_status=1)
-    #     assert_admin_response_structure(data)
-    #     assert data["data"]["admin_id"] == admin["admin_id"]
-    #     assert data["data"]["email"] == admin["email"]
-    #     assert data["data"]["name"] == admin["name"]
+    @pytest.mark.asyncio
+    async def test_get_admin_me_with_invalid_token(self, async_client: AsyncClient):
+        """
+        Test that getting admin profile fails with invalid token.
+        """
+        response = await async_client.get(
+            "/admins/me",
+            headers={"Authorization": "Bearer invalid_token_12345"},
+        )
 
-    # @pytest.mark.asyncio
-    # async def test_get_admin_me_without_token(self, async_client: AsyncClient):
-    #     """
-    #     Test that getting admin profile fails without token.
-    #     """
-    #     response = await async_client.get("/admins/me")
+        # Should fail with 401 Unauthorized
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        error_data = response.json()
+        assert (
+            "not authenticated" in error_data["detail"].lower()
+            or "invalid" in error_data["detail"].lower()
+        )
 
-    #     # Should fail with 401 Unauthorized
-    #     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    #     error_data = response.json()
-    #     assert (
-    #         "not authenticated" in error_data["detail"].lower()
-    #         or "bearer" in error_data["detail"].lower()
-    #     )
+    @pytest.mark.asyncio
+    async def test_get_admin_by_id_not_found(self, async_client: AsyncClient, test_db):
+        """
+        Test getting non-existent admin.
+        """
+        response = await async_client.get("/admins/999999")
 
-    # @pytest.mark.asyncio
-    # async def test_get_admin_me_with_invalid_token(self, async_client: AsyncClient):
-    #     """
-    #     Test that getting admin profile fails with invalid token.
-    #     """
-    #     response = await async_client.get(
-    #         "/admins/me",
-    #         headers={"Authorization": "Bearer invalid_token_12345"},
-    #     )
-
-    #     # Should fail with 401 Unauthorized
-    #     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    #     error_data = response.json()
-    #     assert (
-    #         "not authenticated" in error_data["detail"].lower()
-    #         or "invalid" in error_data["detail"].lower()
-    #     )
-
-    # @pytest.mark.asyncio
-    # async def test_get_admin_by_id_success(self, async_client: AsyncClient, test_db):
-    #     """
-    #     Test getting admin by ID (public endpoint).
-    #     """
-    #     admin = await create_test_admin()
-    #     await add_admin_to_whitelist(admin["email"])
-
-    #     response = await async_client.get(f"/admins/{admin['admin_id']}")
-
-    #     assert response.status_code == status.HTTP_200_OK
-    #     data = response.json()
-    #     assert data["status"] == 1
-    #     assert "data" in data
-    #     assert data["data"]["admin_id"] == admin["admin_id"]
-    #     assert data["data"]["name"] == admin["name"]
-    #     # Public endpoint should not expose email
-    #     assert "email" not in data["data"]
-
-    # @pytest.mark.asyncio
-    # async def test_get_admin_by_id_not_found(self, async_client: AsyncClient, test_db):
-    #     """
-    #     Test getting non-existent admin.
-    #     """
-    #     response = await async_client.get("/admins/999999")
-
-    #     assert response.status_code == status.HTTP_404_NOT_FOUND
-    #     assert "not found" in response.json()["detail"].lower()
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.json()["detail"].lower()

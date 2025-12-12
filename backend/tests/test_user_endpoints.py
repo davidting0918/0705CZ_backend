@@ -299,10 +299,11 @@ async def test_logout_no_session(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_logout_invalidates_session(async_client: AsyncClient, test_user, user_session):
     """Test that logout invalidates the session."""
+    from httpx import ASGITransport
     from backend.main import app
     
     # Create client with session
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         client.cookies.set("session_token", user_session)
         
         # Verify session works
