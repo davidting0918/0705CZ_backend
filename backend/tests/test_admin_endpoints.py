@@ -14,7 +14,6 @@ from backend.tests.conftest import (
     assert_admin_response_structure,
 )
 
-
 class TestAdminEndpointsIntegration:
     """Integration tests for admin endpoints."""
 
@@ -205,7 +204,7 @@ class TestAdminEndpointsIntegration:
 
     @pytest.mark.asyncio
     async def test_login_with_not_whitelisted_admin_fails(
-        self, async_client: AsyncClient, test_db, test_admin_data
+        self, async_client: AsyncClient, test_db, new_admin_data
     ):
         """
         Test that login fails for admin not in whitelist.
@@ -213,7 +212,7 @@ class TestAdminEndpointsIntegration:
         
         response = await async_client.post(
             "/auth/email/admin/login",
-            json={"email": test_admin_data["email"], "password": test_admin_data["password"]},
+            json={"email": new_admin_data["email"], "password": new_admin_data["pwd"]},
         )
 
         # Should fail with 403 Forbidden
@@ -223,7 +222,7 @@ class TestAdminEndpointsIntegration:
 
     @pytest.mark.asyncio
     async def test_get_admin_me_with_valid_token(
-        self, async_client: AsyncClient, test_db, test_helper, test_admin_data
+        self, async_client: AsyncClient, test_db, test_helper, new_admin_data
     ):
         """
         Test getting current admin profile with valid JWT token.
@@ -231,7 +230,7 @@ class TestAdminEndpointsIntegration:
         # Create admin and login to get token
         login_response = await async_client.post(
             "/auth/email/admin/login",
-            json={"email": test_admin_data["email"], "password": test_admin_data["password"]},
+            json={"email": new_admin_data["email"], "password": new_admin_data["pwd"]},
         )
 
         assert login_response.status_code == status.HTTP_200_OK
@@ -248,9 +247,9 @@ class TestAdminEndpointsIntegration:
         data = response.json()
         test_helper.assert_response_structure(data, expected_status=1)
         assert_admin_response_structure(data)
-        assert data["data"]["admin_id"] == test_admin_data["admin_id"]
-        assert data["data"]["email"] == test_admin_data["email"]
-        assert data["data"]["name"] == test_admin_data["name"]
+        assert data["data"]["admin_id"] == new_admin_data["admin_id"]
+        assert data["data"]["email"] == new_admin_data["email"]
+        assert data["data"]["name"] == new_admin_data["name"]
 
     @pytest.mark.asyncio
     async def test_get_admin_me_without_token(self, async_client: AsyncClient):

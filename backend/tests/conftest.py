@@ -311,7 +311,7 @@ async def test_user_data() -> Dict[str, str]:
     }
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="session")
 async def test_admin_data() -> Dict[str, str]:
     """
     Provide test admin data for admin creation tests.
@@ -323,6 +323,14 @@ async def test_admin_data() -> Dict[str, str]:
         "email": f"admin{str(uuid.uuid4())[:8]}@example.com",
         "name": f"Test Admin {str(uuid.uuid4())[:8]}",
         "password": f"TestPassword{str(uuid.uuid4())[:8]}",
+    }
+
+@pytest_asyncio.fixture
+async def new_admin_data() -> Dict[str, str]:
+    return {
+        "email": f"test_{str(uuid.uuid4())[:8]}@example.com",
+        "name": f"Test Admin {str(uuid.uuid4())[:8]}",
+        "pwd": f"TestPassword{str(uuid.uuid4())[:8]}",
     }
 
 # Test utilities
