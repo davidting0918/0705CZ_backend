@@ -6,8 +6,6 @@ from datetime import datetime as dt
 from datetime import timezone as tz
 from typing import Optional
 
-from backend.core.db_manager import get_db
-from backend.core.security import generate_admin_id, hash_password_admin
 from backend.admins.admin_models import (
     AdminCreate,
     AdminProfileResponse,
@@ -17,6 +15,8 @@ from backend.admins.admin_models import (
     AdminUpdateRequest,
 )
 from backend.admins.admin_whitelist_service import admin_whitelist_service
+from backend.core.db_manager import get_db
+from backend.core.security import generate_admin_id, hash_password_admin
 
 
 class AdminService:
@@ -85,7 +85,7 @@ class AdminService:
     async def get_admin_by_id_response(self, admin_id: str) -> dict:
         """
         Get admin by ID and return formatted response.
-        
+
         Raises ValueError if admin not found.
         """
         admin = await self.get_admin_by_id(admin_id)
@@ -106,7 +106,7 @@ class AdminService:
     async def create_admin(self, request: AdminRegisterRequest) -> dict:
         """
         Create a new admin from registration request.
-        
+
         Raises ValueError if email already exists or email is not whitelisted.
         """
         # Check if email is whitelisted
@@ -146,7 +146,7 @@ class AdminService:
     async def create_admin_response(self, request: AdminRegisterRequest) -> AdminResponse:
         """
         Create a new admin and return formatted response.
-        
+
         Raises ValueError if email already exists.
         """
         admin = await self.create_admin(request)
@@ -191,7 +191,7 @@ class AdminService:
         values.append(admin_id)
 
         query = f"""
-            UPDATE admins 
+            UPDATE admins
             SET {', '.join(updates)}
             WHERE admin_id = ${param_count}
             RETURNING *
@@ -212,13 +212,13 @@ class AdminService:
         """
         Find existing admin by google_id or email, or create new admin from Google OAuth.
         Updates google_id and photo_url if admin exists but OAuth ID is missing.
-        
+
         Args:
             email: Admin email from Google
             name: Admin name from Google
             google_id: Google OAuth ID
             photo_url: Admin photo URL from Google (optional)
-            
+
         Returns:
             Admin dict
         """
@@ -258,7 +258,7 @@ class AdminService:
             if updates:
                 updates.append("updated_at = CURRENT_TIMESTAMP")
                 update_query = f"""
-                    UPDATE admins 
+                    UPDATE admins
                     SET {', '.join(updates)}
                     WHERE admin_id = ${param_index}
                 """
@@ -284,16 +284,16 @@ class AdminService:
     ) -> dict:
         """
         Create a new admin from Google OAuth login.
-        
+
         Args:
             email: Admin email from Google
             name: Admin name from Google
             google_id: Google OAuth ID
             photo_url: Admin photo URL from Google (optional)
-            
+
         Returns:
             Admin dict
-            
+
         Raises:
             ValueError: If email is not whitelisted
         """

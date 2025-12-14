@@ -7,11 +7,12 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-
 # ================== Request Models ==================
+
 
 class UserRegisterRequest(BaseModel):
     """User registration request body."""
+
     email: EmailStr
     password: str
     name: str
@@ -21,8 +22,10 @@ class UserRegisterRequest(BaseModel):
 
 # ================== Response Models ==================
 
+
 class UserPublicResponse(BaseModel):
     """Public user information (minimal)."""
+
     user_id: str
     name: str
     photo_url: Optional[str] = None
@@ -30,6 +33,7 @@ class UserPublicResponse(BaseModel):
 
 class UserProfileResponse(BaseModel):
     """Full user profile response (for authenticated user)."""
+
     user_id: str
     email: str
     name: str
@@ -44,6 +48,7 @@ class UserProfileResponse(BaseModel):
 
 class UserResponse(BaseModel):
     """Standard user response wrapper."""
+
     status: int = 1
     message: str
     data: UserProfileResponse
@@ -51,8 +56,10 @@ class UserResponse(BaseModel):
 
 # ================== Internal Models ==================
 
+
 class UserCreate(BaseModel):
     """Internal model for creating a user."""
+
     user_id: str
     email: str
     name: str
@@ -66,4 +73,3 @@ class UserCreate(BaseModel):
     is_verified: bool = False
     created_at: dt
     updated_at: dt
-

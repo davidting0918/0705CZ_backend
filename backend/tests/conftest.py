@@ -10,26 +10,18 @@ import os
 import random
 import string
 import uuid
-from datetime import datetime as dt
-from datetime import timezone as tz
 from typing import AsyncGenerator, Dict
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 # Set test environment before importing application modules
 os.environ["PYTEST_RUNNING"] = "1"
 os.environ["APP_ENV"] = "test"
 
 from backend.core.db_manager import close_database, get_db, init_database
-from backend.core.security import (
-    generate_admin_id,
-    generate_user_id,
-    hash_password_admin,
-    hash_password_user,
-)
 from backend.main import app
 
 tables = [
@@ -296,7 +288,7 @@ def sync_client() -> TestClient:
     return TestClient(app)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="session")
 async def test_user_data() -> Dict[str, str]:
     """
     Provide test user data for user creation tests.
@@ -305,9 +297,9 @@ async def test_user_data() -> Dict[str, str]:
         Dict containing user registration information
     """
     return {
-        "email": f"test_{str(uuid.uuid4())[:8]}@example.com",
-        "name": f"Test User {str(uuid.uuid4())[:8]}",
-        "pwd": f"TestPassword{str(uuid.uuid4())[:8]}",
+        "email": "test_user@example.com",
+        "name": "Test User",
+        "pwd": "TestPassword123!",
     }
 
 
@@ -325,6 +317,7 @@ async def test_admin_data() -> Dict[str, str]:
         "password": f"TestPassword{str(uuid.uuid4())[:8]}",
     }
 
+
 @pytest_asyncio.fixture
 async def new_admin_data() -> Dict[str, str]:
     return {
@@ -332,6 +325,7 @@ async def new_admin_data() -> Dict[str, str]:
         "name": f"Test Admin {str(uuid.uuid4())[:8]}",
         "pwd": f"TestPassword{str(uuid.uuid4())[:8]}",
     }
+
 
 # Test utilities
 class TestHelper:
@@ -361,16 +355,10 @@ class TestHelper:
         Args:
             user_data: User data dictionary
         """
-        required_fields = [
-            "id",
-            "email",
-            "name",
-            "created_at",
-            "updated_at",
-            "is_active"
-        ]
+        required_fields = ["id", "email", "name", "created_at", "updated_at", "is_active"]
         for field in required_fields:
             assert field in user_data, f"Missing required field: {field}"
+
 
 @pytest.fixture
 def test_helper() -> TestHelper:
@@ -398,7 +386,7 @@ def assert_admin_response_structure(response_data: dict) -> None:
     assert "message" in response_data
     assert "data" in response_data
     assert response_data["status"] == 1
-    
+
     data = response_data["data"]
     assert "admin_id" in data
     assert "email" in data
@@ -414,7 +402,7 @@ def assert_user_response_structure(response_data: dict) -> None:
     assert "message" in response_data
     assert "data" in response_data
     assert response_data["status"] == 1
-    
+
     data = response_data["data"]
     assert "user_id" in data
     assert "email" in data
@@ -431,7 +419,7 @@ def assert_user_response_structure(response_data: dict) -> None:
 async def add_admin_to_whitelist(email: str) -> None:
     """
     Add an email to the admin whitelist.
-    
+
     Args:
         email: Email address to add to whitelist
     """
@@ -443,6 +431,7 @@ async def add_admin_to_whitelist(email: str) -> None:
         )
     except Exception as e:
         print(f"Warning: Error adding {email} to whitelist: {e}")
+
 
 # ================== SESSION-SCOPED TEST USERS (PERFORMANCE OPTIMIZED) ==================
 
@@ -459,7 +448,12 @@ async def session_admins(test_db) -> Dict[str, Dict[str, str]]:
     from httpx import AsyncClient
 
     admin_configs = [
-        {"email": "session.admin1@example.com", "name": "Session Admin 1", "password": "TestPassword123!", "key": "admin1"},
+        {
+            "email": "session.admin1@example.com",
+            "name": "Session Admin 1",
+            "password": "TestPassword123!",
+            "key": "admin1",
+        },
     ]
 
     created_admins = {}
@@ -478,7 +472,11 @@ async def session_admins(test_db) -> Dict[str, Dict[str, str]]:
                 headers={
                     "Content-Type": "application/json",
                 },
-                json={"email": admin_config["email"], "name": admin_config["name"], "password": admin_config["password"]},
+                json={
+                    "email": admin_config["email"],
+                    "name": admin_config["name"],
+                    "password": admin_config["password"],
+                },
             )
 
             admin_created = False
@@ -492,6 +490,7 @@ async def session_admins(test_db) -> Dict[str, Dict[str, str]]:
             elif response.status_code == 400 and "already exists" in response.text.lower():
                 # Admin already exists from previous test run - fetch it
                 from backend.admins.admin_services import admin_service
+
                 existing_admin = await admin_service.get_admin_by_email(admin_config["email"])
                 if existing_admin:
                     admin_info = existing_admin

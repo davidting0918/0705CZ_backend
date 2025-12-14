@@ -1,2 +1,1 @@
 """Users module - user management."""
-

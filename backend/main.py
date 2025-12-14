@@ -13,13 +13,12 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
+from backend.admins.admin_routers import router as admin_router
+from backend.auth.auth_routers import router as auth_router
 from backend.core.db_manager import close_database, init_database
 from backend.core.environment import env_config
-
-from backend.auth.auth_routers import router as auth_router
-from backend.users.user_routers import router as user_router
 from backend.products.product_routers import router as product_router
-from backend.admins.admin_routers import router as admin_router
+from backend.users.user_routers import router as user_router
 
 
 @asynccontextmanager
@@ -82,7 +81,7 @@ async def scalar_html():
 
 if __name__ == "__main__":
     # Get configuration from environment variables or use defaults
-    
+
     # Run the server
     uvicorn.run(
         "backend.main:app",
@@ -91,4 +90,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info",
     )
-

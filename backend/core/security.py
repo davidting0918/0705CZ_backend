@@ -8,19 +8,19 @@ This module provides common security functions used across the application:
 - JWT token utilities
 """
 
+import hashlib
 import os
 import random
 import secrets
 import string
-import hashlib
 from datetime import datetime as dt
 from datetime import timedelta as td
 from datetime import timezone as tz
 from typing import Optional
 
+import bcrypt as bcrypt_lib
 from dotenv import load_dotenv
 from jose import JWTError, jwt
-import bcrypt as bcrypt_lib
 
 load_dotenv("backend/.env")
 
@@ -41,30 +41,32 @@ SESSION_COOKIE_NAME = "session_token"
 
 # ================== Password Utilities ==================
 
+
 def hash_password_user(password: str) -> str:
     """Hash a password for users using bcrypt with user rounds."""
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS_USER)
     hashed = bcrypt_lib.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
+    return hashed.decode("utf-8")
 
 
 def hash_password_admin(password: str) -> str:
     """Hash a password for admins using bcrypt with admin rounds (higher security)."""
-    password_bytes = password.encode('utf-8')
+    password_bytes = password.encode("utf-8")
     salt = bcrypt_lib.gensalt(rounds=BCRYPT_ROUNDS_ADMIN)
     hashed = bcrypt_lib.hashpw(password_bytes, salt)
-    return hashed.decode('utf-8')
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash (works for both user and admin hashes)."""
-    password_bytes = plain_password.encode('utf-8')
-    hashed_bytes = hashed_password.encode('utf-8')
+    password_bytes = plain_password.encode("utf-8")
+    hashed_bytes = hashed_password.encode("utf-8")
     return bcrypt_lib.checkpw(password_bytes, hashed_bytes)
 
 
 # ================== ID Generation ==================
+
 
 def generate_user_id() -> str:
     """
@@ -113,6 +115,7 @@ def generate_order_id() -> str:
 
 # ================== Session Token Utilities ==================
 
+
 def generate_session_token() -> str:
     """Generate a cryptographically secure session token."""
     return secrets.token_urlsafe(32)
@@ -130,14 +133,15 @@ def get_session_expiry() -> dt:
 
 # ================== JWT Token Utilities ==================
 
+
 def create_access_token(user_id: str, expires_delta: Optional[td] = None) -> str:
     """
     Create a JWT access token for staff dashboard authentication.
-    
+
     Args:
         user_id: The user ID to encode in the token
         expires_delta: Optional custom expiry time
-        
+
     Returns:
         Encoded JWT token string
     """
@@ -145,23 +149,23 @@ def create_access_token(user_id: str, expires_delta: Optional[td] = None) -> str
         expire = dt.now(tz.utc) + expires_delta
     else:
         expire = dt.now(tz.utc) + td(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode = {
         "sub": user_id,
         "exp": expire,
         "iat": dt.now(tz.utc),
     }
-    
+
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> Optional[dict]:
     """
     Decode and validate a JWT access token.
-    
+
     Args:
         token: The JWT token to decode
-        
+
     Returns:
         Decoded payload dict or None if invalid
     """
@@ -175,4 +179,3 @@ def decode_access_token(token: str) -> Optional[dict]:
 def get_token_expiry() -> dt:
     """Get access token expiry datetime."""
     return dt.now(tz.utc) + td(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-

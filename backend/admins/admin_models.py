@@ -7,11 +7,12 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr
 
-
 # ================== Request Models ==================
+
 
 class AdminRegisterRequest(BaseModel):
     """Admin registration request body."""
+
     email: EmailStr
     password: str
     name: str
@@ -21,6 +22,7 @@ class AdminRegisterRequest(BaseModel):
 
 class AdminUpdateRequest(BaseModel):
     """Admin update request body."""
+
     name: Optional[str] = None
     phone: Optional[str] = None
     photo_url: Optional[str] = None
@@ -28,13 +30,16 @@ class AdminUpdateRequest(BaseModel):
 
 class AdminGoogleLoginRequest(BaseModel):
     """Admin Google OAuth login request body."""
+
     token: str
 
 
 # ================== Response Models ==================
 
+
 class AdminPublicResponse(BaseModel):
     """Public admin information (minimal)."""
+
     admin_id: str
     name: str
     photo_url: Optional[str] = None
@@ -42,6 +47,7 @@ class AdminPublicResponse(BaseModel):
 
 class AdminProfileResponse(BaseModel):
     """Full admin profile response (for authenticated admin)."""
+
     admin_id: str
     email: str
     name: str
@@ -55,6 +61,7 @@ class AdminProfileResponse(BaseModel):
 
 class AdminResponse(BaseModel):
     """Standard admin response wrapper."""
+
     status: int = 1
     message: str
     data: AdminProfileResponse
@@ -62,8 +69,10 @@ class AdminResponse(BaseModel):
 
 # ================== Internal Models ==================
 
+
 class AdminCreate(BaseModel):
     """Internal model for creating an admin."""
+
     admin_id: str
     email: str
     name: str

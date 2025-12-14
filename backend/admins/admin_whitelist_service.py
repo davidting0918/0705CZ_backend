@@ -19,10 +19,10 @@ class AdminWhitelistService:
     async def check_email_whitelisted(self, email: str) -> bool:
         """
         Check if email is in the whitelist.
-        
+
         Args:
             email: Email address to check
-            
+
         Returns:
             True if email is whitelisted, False otherwise
         """

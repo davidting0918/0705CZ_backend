@@ -30,7 +30,7 @@ class PostgresAsyncClient:
         """
         self.environment = environment
         self.connection_string = get_database_connection_string(environment)
-        
+
         self._pool: Optional[Pool] = None
         self._init_lock: Optional[asyncio.Lock] = None  # Lazy initialization of lock
         self._pool_loop_id: Optional[int] = None  # Track which event loop the pool was created in
@@ -124,9 +124,11 @@ class PostgresAsyncClient:
             # If we get a "different loop" error or "another operation is in progress"
             # due to event loop mismatch, try to recreate the pool
             error_msg = str(e).lower()
-            if ("different loop" in error_msg or 
-                "attached to a different" in error_msg or
-                ("another operation is in progress" in error_msg and self._pool_loop_id is not None)):
+            if (
+                "different loop" in error_msg
+                or "attached to a different" in error_msg
+                or ("another operation is in progress" in error_msg and self._pool_loop_id is not None)
+            ):
                 # Check if we're actually in a different loop
                 try:
                     current_loop_id = id(asyncio.get_running_loop())
@@ -147,7 +149,7 @@ class PostgresAsyncClient:
                                 min_size=1,
                                 max_size=50,
                                 command_timeout=60,
-                                statement_cache_size=0,  # Disable statement caching to avoid InvalidCachedStatementError
+                                statement_cache_size=0,
                             )
                             self._pool_loop_id = id(current_loop)
                         # Retry acquiring connection

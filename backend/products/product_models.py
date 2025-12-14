@@ -7,11 +7,12 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-
 # ================== Request Models ==================
+
 
 class ProductCreateRequest(BaseModel):
     """Product creation request body (staff only)."""
+
     product_sku: str = Field(..., min_length=1, max_length=50)
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
@@ -25,8 +26,10 @@ class ProductCreateRequest(BaseModel):
 
 # ================== Response Models ==================
 
+
 class ProductResponse(BaseModel):
     """Single product response."""
+
     product_id: str
     product_sku: str
     name: str
@@ -43,6 +46,7 @@ class ProductResponse(BaseModel):
 
 class ProductListItemResponse(BaseModel):
     """Product item in list response (minimal fields)."""
+
     product_id: str
     product_sku: str
     name: str
@@ -55,6 +59,7 @@ class ProductListItemResponse(BaseModel):
 
 class SingleProductResponse(BaseModel):
     """Standard single product response wrapper."""
+
     status: int = 1
     message: str
     data: ProductResponse
@@ -62,6 +67,7 @@ class SingleProductResponse(BaseModel):
 
 class ProductListResponse(BaseModel):
     """Product list response wrapper."""
+
     status: int = 1
     message: str
     data: list[ProductListItemResponse]
@@ -72,6 +78,7 @@ class ProductListResponse(BaseModel):
 
 class CategoryListResponse(BaseModel):
     """Category list response wrapper."""
+
     status: int = 1
     message: str
     data: list[str]
@@ -79,8 +86,10 @@ class CategoryListResponse(BaseModel):
 
 # ================== Internal Models ==================
 
+
 class ProductCreate(BaseModel):
     """Internal model for creating a product."""
+
     product_id: str
     product_sku: str
     name: str
@@ -93,4 +102,3 @@ class ProductCreate(BaseModel):
     is_active: bool = True
     created_at: dt
     updated_at: dt
-

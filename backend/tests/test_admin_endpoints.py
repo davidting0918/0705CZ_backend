@@ -9,10 +9,8 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from backend.tests.conftest import (
-    add_admin_to_whitelist,
-    assert_admin_response_structure,
-)
+from backend.tests.conftest import add_admin_to_whitelist, assert_admin_response_structure
+
 
 class TestAdminEndpointsIntegration:
     """Integration tests for admin endpoints."""
@@ -104,16 +102,15 @@ class TestAdminEndpointsIntegration:
         print(f"✅ Successfully created admin {admin_data['admin_id']} and authenticated")
 
     @pytest.mark.asyncio
-    async def test_create_admin_without_whitelist_fails(
-        self, async_client: AsyncClient, test_admin_data: dict
-    ):
+    async def test_create_admin_without_whitelist_fails(self, async_client: AsyncClient, test_admin_data: dict):
         """
         Test that admin creation fails without whitelisted email.
         """
         # Use a different email that's not whitelisted
         from backend.tests.conftest import generate_test_email
+
         non_whitelisted_email = generate_test_email("nonwhitelisted")
-        
+
         # Attempt to create admin without whitelist
         response = await async_client.post(
             "/admins/register",
@@ -130,9 +127,7 @@ class TestAdminEndpointsIntegration:
         assert "not whitelisted" in error_data["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_create_admin_with_invalid_email_fails(
-        self, async_client: AsyncClient, test_admin_data: dict
-    ):
+    async def test_create_admin_with_invalid_email_fails(self, async_client: AsyncClient, test_admin_data: dict):
         """
         Test that admin creation fails with invalid email format.
         """
@@ -151,13 +146,12 @@ class TestAdminEndpointsIntegration:
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
-    async def test_create_duplicate_admin_fails(
-        self, async_client: AsyncClient, test_admin_data: dict
-    ):
+    async def test_create_duplicate_admin_fails(self, async_client: AsyncClient, test_admin_data: dict):
         """
         Test that creating an admin with existing email fails.
         """
         from backend.tests.conftest import generate_test_email
+
         email = generate_test_email("duplicate")
         await add_admin_to_whitelist(email)
 
@@ -203,13 +197,11 @@ class TestAdminEndpointsIntegration:
         assert "incorrect email or password" in error_data["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_login_with_not_whitelisted_admin_fails(
-        self, async_client: AsyncClient, test_db, new_admin_data
-    ):
+    async def test_login_with_not_whitelisted_admin_fails(self, async_client: AsyncClient, test_db, new_admin_data):
         """
         Test that login fails for admin not in whitelist.
         """
-        
+
         response = await async_client.post(
             "/auth/email/admin/login",
             json={"email": new_admin_data["email"], "password": new_admin_data["pwd"]},
@@ -230,10 +222,7 @@ class TestAdminEndpointsIntegration:
         # Should fail with 401 Unauthorized
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         error_data = response.json()
-        assert (
-            "not authenticated" in error_data["detail"].lower()
-            or "bearer" in error_data["detail"].lower()
-        )
+        assert "not authenticated" in error_data["detail"].lower() or "bearer" in error_data["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_get_admin_me_with_invalid_token(self, async_client: AsyncClient):
@@ -248,10 +237,7 @@ class TestAdminEndpointsIntegration:
         # Should fail with 401 Unauthorized
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         error_data = response.json()
-        assert (
-            "not authenticated" in error_data["detail"].lower()
-            or "invalid" in error_data["detail"].lower()
-        )
+        assert "not authenticated" in error_data["detail"].lower() or "invalid" in error_data["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_get_admin_by_id_not_found(self, async_client: AsyncClient, test_db):

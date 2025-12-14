@@ -1,2 +1,1 @@
 """Products module - product management."""
-

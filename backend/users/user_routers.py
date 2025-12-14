@@ -23,6 +23,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 # ================== Authenticated User Endpoints ==================
 
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(
     current_user: dict = Depends(get_current_user_session),
@@ -35,6 +36,7 @@ async def get_current_user_profile(
 
 
 # ================== Public Endpoints ==================
+
 
 @router.post("/register", response_model=UserResponse)
 async def register_user(body: UserRegisterRequest) -> UserResponse:
@@ -53,6 +55,7 @@ async def register_user(body: UserRegisterRequest) -> UserResponse:
 
 # ================== Public Endpoints (Rate Limited) ==================
 
+
 @router.get("/{user_id}")
 @limiter.limit("60/minute")
 async def get_user_by_id(
@@ -70,4 +73,3 @@ async def get_user_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
-

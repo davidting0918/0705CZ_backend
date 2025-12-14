@@ -10,6 +10,8 @@ Provides endpoints for:
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from backend.auth.auth_services import get_current_admin_token
 from backend.products.product_models import (
@@ -19,8 +21,6 @@ from backend.products.product_models import (
     SingleProductResponse,
 )
 from backend.products.product_services import product_service
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -29,6 +29,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 # ================== Public Endpoints (Rate Limited) ==================
+
 
 @router.get("/", response_model=ProductListResponse)
 @limiter.limit("60/minute")
@@ -84,6 +85,7 @@ async def get_product(
 
 # ================== Access Token Protected Endpoints (Staff Only) ==================
 
+
 @router.post("/", response_model=SingleProductResponse)
 async def create_product(
     body: ProductCreateRequest,
@@ -100,4 +102,3 @@ async def create_product(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-

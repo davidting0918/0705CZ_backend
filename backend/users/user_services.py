@@ -84,7 +84,7 @@ class UserService:
     async def get_user_by_id_response(self, user_id: str) -> dict:
         """
         Get user by ID and return formatted response.
-        
+
         Raises ValueError if user not found.
         """
         user = await self.get_user_by_id(user_id)
@@ -100,7 +100,7 @@ class UserService:
     async def create_user(self, request: UserRegisterRequest) -> dict:
         """
         Create a new user from registration request.
-        
+
         Raises ValueError if email already exists.
         """
         # Check if email already exists
@@ -136,7 +136,7 @@ class UserService:
     async def create_user_response(self, request: UserRegisterRequest) -> UserResponse:
         """
         Create a new user and return formatted response.
-        
+
         Raises ValueError if email already exists.
         """
         user = await self.create_user(request)
@@ -149,4 +149,3 @@ class UserService:
 
 # Global user service instance
 user_service = UserService()
-

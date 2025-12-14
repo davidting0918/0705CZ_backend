@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
+from backend.admins.admin_services import admin_service
+from backend.admins.admin_whitelist_service import admin_whitelist_service
+from backend.auth.auth_models import AccessTokenData, GoogleUserInfo, LineUserInfo, SessionData
 from backend.core.db_manager import get_db
 from backend.core.security import (
     SESSION_COOKIE_NAME,
@@ -29,14 +32,6 @@ from backend.core.security import (
     hash_token,
     verify_password,
 )
-from backend.auth.auth_models import (
-    AccessTokenData,
-    GoogleUserInfo,
-    LineUserInfo,
-    SessionData,
-)
-from backend.admins.admin_whitelist_service import admin_whitelist_service
-from backend.admins.admin_services import admin_service
 
 load_dotenv("backend/.env")
 
@@ -69,12 +64,12 @@ class AuthService:
     ) -> Optional[dict]:
         """
         Generic user authentication by field (email or name).
-        
+
         Args:
             field: Field name to query (email or name)
             value: Field value to match
             password: Password to verify
-            
+
         Returns:
             User dict if valid, None otherwise
         """
@@ -92,7 +87,7 @@ class AuthService:
     async def authenticate_by_email(self, email: str, password: str) -> Optional[dict]:
         """
         Authenticate user by email and password.
-        
+
         Returns user dict if valid, None otherwise.
         """
         return await self._authenticate_user("email", email, password)
@@ -101,14 +96,14 @@ class AuthService:
         """
         Authenticate admin by email and password.
         Checks email whitelist after successful password verification.
-        
+
         Args:
             email: Admin email address
             password: Admin password
-            
+
         Returns:
             Admin dict if valid and whitelisted, None otherwise
-            
+
         Raises:
             HTTPException: If email is not whitelisted (403)
         """
@@ -142,13 +137,13 @@ class AuthService:
     ) -> Optional[dict]:
         """
         Make HTTP request and return JSON response if successful.
-        
+
         Args:
             method: HTTP method (GET, POST, etc.)
             url: Request URL
             headers: Optional request headers
             data: Optional request data (for POST requests)
-            
+
         Returns:
             JSON response dict if successful, None otherwise
         """
@@ -160,10 +155,10 @@ class AuthService:
                     response = await client.post(url, headers=headers or {}, data=data)
                 else:
                     return None
-                
+
                 if response.status_code != 200:
                     return None
-                
+
                 return response.json()
         except Exception:
             return None
@@ -171,14 +166,12 @@ class AuthService:
     async def verify_google_token(self, token: str) -> Optional[GoogleUserInfo]:
         """Verify Google OAuth token and get user info."""
         data = await self._make_http_request(
-            "GET",
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {token}"}
+            "GET", "https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         if not data:
             return None
-        
+
         return GoogleUserInfo(
             id=data["sub"],
             email=data["email"],
@@ -197,14 +190,14 @@ class AuthService:
         """
         Find existing user by email or create new OAuth user.
         Updates OAuth IDs if user exists but OAuth ID is missing.
-        
+
         Args:
             email: User email
             name: User name
             photo_url: User photo URL
             google_id: Google OAuth ID (optional)
             line_id: LINE OAuth ID (optional)
-            
+
         Returns:
             User dict
         """
@@ -239,7 +232,7 @@ class AuthService:
             if updates:
                 updates.append("updated_at = CURRENT_TIMESTAMP")
                 update_query = f"""
-                    UPDATE users 
+                    UPDATE users
                     SET {', '.join(updates)}
                     WHERE user_id = ${param_index}
                 """
@@ -277,13 +270,13 @@ class AuthService:
         """
         Authenticate admin via Google OAuth.
         Checks email whitelist, creates admin if not exists, updates google_id if needed.
-        
+
         Args:
             token: Google OAuth token
-            
+
         Returns:
             Admin dict if authentication successful and email is whitelisted, None otherwise
-            
+
         Raises:
             HTTPException: If email is not whitelisted (403) or Google token is invalid (401)
         """
@@ -338,20 +331,18 @@ class AuthService:
                 "client_secret": self.line_client_secret,
             },
         )
-        
+
         return data.get("access_token") if data else None
 
     async def get_line_user_info(self, access_token: str) -> Optional[LineUserInfo]:
         """Get LINE user profile info."""
         data = await self._make_http_request(
-            "GET",
-            "https://api.line.me/v2/profile",
-            headers={"Authorization": f"Bearer {access_token}"}
+            "GET", "https://api.line.me/v2/profile", headers={"Authorization": f"Bearer {access_token}"}
         )
-        
+
         if not data:
             return None
-        
+
         return LineUserInfo(
             user_id=data["userId"],
             display_name=data["displayName"],
@@ -380,7 +371,7 @@ class AuthService:
 
         # Use email if available, otherwise create placeholder email
         email = line_info.email or f"{line_info.user_id}@line.placeholder"
-        
+
         # Find or create user (will update line_id if user exists by email)
         return await self._find_or_create_oauth_user(
             email=email,
@@ -401,7 +392,7 @@ class AuthService:
     ) -> dict:
         """Create a new user from OAuth login."""
         user_id = generate_user_id()
-        
+
         # Ensure unique user_id
         while await self.db.read_one("SELECT 1 FROM users WHERE user_id = $1", user_id):
             user_id = generate_user_id()
@@ -436,7 +427,7 @@ class AuthService:
     ) -> tuple[str, SessionData]:
         """
         Create a new session for user.
-        
+
         Returns (raw_token, session_data) tuple.
         """
         token = generate_session_token()
@@ -451,13 +442,16 @@ class AuthService:
             expires_at=expires_at,
         )
 
-        await self.db.insert_one("sessions", {
-            "user_id": session_data.user_id,
-            "token_hash": session_data.token_hash,
-            "ip_address": session_data.ip_address,
-            "user_agent": session_data.user_agent,
-            "expires_at": session_data.expires_at,
-        })
+        await self.db.insert_one(
+            "sessions",
+            {
+                "user_id": session_data.user_id,
+                "token_hash": session_data.token_hash,
+                "ip_address": session_data.ip_address,
+                "user_agent": session_data.user_agent,
+                "expires_at": session_data.expires_at,
+            },
+        )
 
         return token, session_data
 
@@ -469,23 +463,23 @@ class AuthService:
         """
         Create a session for user from FastAPI Request object.
         Extracts IP address and user agent from request automatically.
-        
+
         Args:
             request: FastAPI Request object
             user_id: User ID to create session for
-            
+
         Returns:
             Session token string (to be set in cookie)
         """
         ip_address = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
-        
+
         token, _ = await self.create_session(
             user_id=user_id,
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        
+
         return token
 
     async def validate_session(self, token: str) -> Optional[dict]:
@@ -493,11 +487,11 @@ class AuthService:
         Validate session token and return user if valid.
         """
         token_hash = hash_token(token)
-        
+
         query = """
             SELECT u.* FROM sessions s
             JOIN users u ON s.user_id = u.user_id
-            WHERE s.token_hash = $1 
+            WHERE s.token_hash = $1
             AND s.expires_at > CURRENT_TIMESTAMP
             AND u.is_active = TRUE
         """
@@ -507,10 +501,7 @@ class AuthService:
     async def delete_session(self, token: str) -> bool:
         """Delete a session (logout)."""
         token_hash = hash_token(token)
-        result = await self.db.execute(
-            "DELETE FROM sessions WHERE token_hash = $1",
-            token_hash
-        )
+        result = await self.db.execute("DELETE FROM sessions WHERE token_hash = $1", token_hash)
         return "DELETE" in result
 
     # ================== Access Token Management ==================
@@ -518,7 +509,7 @@ class AuthService:
     async def create_access_token_record(self, admin_id: str) -> tuple[str, AccessTokenData]:
         """
         Create a JWT access token and store hash in database.
-        
+
         Returns (jwt_token, token_data) tuple.
         """
         jwt_token = create_access_token(admin_id)
@@ -531,11 +522,14 @@ class AuthService:
             expires_at=expires_at,
         )
 
-        await self.db.insert_one("access_tokens", {
-            "admin_id": token_data.admin_id,
-            "token_hash": token_data.token_hash,
-            "expires_at": token_data.expires_at,
-        })
+        await self.db.insert_one(
+            "access_tokens",
+            {
+                "admin_id": token_data.admin_id,
+                "token_hash": token_data.token_hash,
+                "expires_at": token_data.expires_at,
+            },
+        )
 
         return jwt_token, token_data
 
@@ -557,7 +551,7 @@ class AuthService:
         query = """
             SELECT a.* FROM access_tokens t
             JOIN admins a ON t.admin_id = a.admin_id
-            WHERE t.token_hash = $1 
+            WHERE t.token_hash = $1
             AND t.expires_at > CURRENT_TIMESTAMP
             AND a.is_active = TRUE
         """
@@ -570,6 +564,7 @@ auth_service = AuthService()
 
 
 # ================== FastAPI Dependencies ==================
+
 
 async def get_current_user_session(request: Request) -> dict:
     """

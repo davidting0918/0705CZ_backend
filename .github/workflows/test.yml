@@ -10,16 +10,16 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     environment: test_env
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python 3.13
       uses: actions/setup-python@v5
       with:
         python-version: '3.13'
-        
+
     - name: Cache pip packages
       uses: actions/cache@v4
       with:
@@ -27,20 +27,28 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
-          
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
-        
-    - name: Run tests with coverage
+
+    - name: Run admin tests
       env:
         POSTGRES_TEST: ${{ secrets.POSTGRES_TEST }}
         APP_ENV: test
         PYTEST_RUNNING: "1"
       run: |
         python3 -m pytest backend/tests/test_admin_endpoints.py -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
-          
+
+    - name: Run user tests
+      env:
+        POSTGRES_TEST: ${{ secrets.POSTGRES_TEST }}
+        APP_ENV: test
+        PYTEST_RUNNING: "1"
+      run: |
+        python3 -m pytest backend/tests/test_user_endpoints.py -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
+
     - name: Upload coverage to artifacts
       uses: actions/upload-artifact@v4
       if: always()
@@ -48,4 +56,3 @@ jobs:
         name: coverage-report
         path: coverage.xml
         retention-days: 30
-

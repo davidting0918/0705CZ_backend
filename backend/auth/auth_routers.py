@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from backend.core.security import ACCESS_TOKEN_EXPIRE_MINUTES, SESSION_COOKIE_NAME
+from backend.admins.admin_models import AdminGoogleLoginRequest
 from backend.auth.auth_models import (
     AccessTokenResponse,
     EmailLoginRequest,
@@ -24,17 +24,18 @@ from backend.auth.auth_models import (
     UserResponse,
 )
 from backend.auth.auth_services import auth_service, get_current_user_session
-from backend.admins.admin_models import AdminGoogleLoginRequest
+from backend.core.security import ACCESS_TOKEN_EXPIRE_MINUTES, SESSION_COOKIE_NAME
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # ================== Helper Functions ==================
 
+
 def set_session_cookie(response: Response, token: str) -> None:
     """
     Set HTTP-only session cookie on response.
-    
+
     Args:
         response: FastAPI Response object
         token: Session token to set
@@ -52,10 +53,10 @@ def set_session_cookie(response: Response, token: str) -> None:
 def build_user_response(user: dict) -> UserResponse:
     """
     Build UserResponse from user dict.
-    
+
     Args:
         user: User dictionary from database
-        
+
     Returns:
         UserResponse object
     """
@@ -70,11 +71,11 @@ def build_user_response(user: dict) -> UserResponse:
 def build_session_login_response(user: dict, message: str = "Login successful") -> SessionLoginResponse:
     """
     Build SessionLoginResponse from user dict.
-    
+
     Args:
         user: User dictionary from database
         message: Success message
-        
+
     Returns:
         SessionLoginResponse object
     """
@@ -86,6 +87,7 @@ def build_session_login_response(user: dict, message: str = "Login successful") 
 
 
 # ================== Session-Based Authentication (User Website) ==================
+
 
 @router.post("/email/user/login", response_model=SessionLoginResponse)
 async def email_user_login(
@@ -117,7 +119,7 @@ async def email_admin_login(
     """
     Admin email login endpoint.
     Authenticates admin via email/password and returns JWT access token.
-    
+
     Only emails in the admin whitelist can successfully login.
     Returns 403 Forbidden if email is not whitelisted.
     Returns 401 Unauthorized if email/password is incorrect.
@@ -170,7 +172,7 @@ async def google_admin_login(
     """
     Admin Google OAuth login endpoint.
     Authenticates admin via Google OAuth token and returns JWT access token.
-    
+
     Only emails in the admin whitelist can successfully login.
     Returns 403 Forbidden if email is not whitelisted.
     Returns 401 Unauthorized if Google token is invalid.
@@ -201,7 +203,7 @@ async def line_login_initiate(body: LineLoginRequest) -> LineLoginResponse:
     """
     state = secrets.token_urlsafe(16)
     auth_url = auth_service.get_line_authorization_url(state, body.redirect_uri)
-    
+
     return LineLoginResponse(authorization_url=auth_url)
 
 
@@ -230,6 +232,7 @@ async def line_login_callback(
 
 # ================== Access Token (Staff Dashboard) ==================
 
+
 @router.post("/access_token", response_model=AccessTokenResponse)
 async def get_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -238,7 +241,7 @@ async def get_access_token(
     Get JWT access token for admin dashboard.
     Uses OAuth2 password flow (username=email, password).
     Authenticates against admins table.
-    
+
     Requires email to be whitelisted in admin_whitelist table.
     Returns 403 Forbidden if email is not whitelisted.
     Returns 401 Unauthorized if email/password is incorrect.
@@ -263,6 +266,7 @@ async def get_access_token(
 
 # ================== Logout ==================
 
+
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -281,5 +285,6 @@ async def logout(
 
     return {
         "status": 1,
+        "data": None,
         "message": "Logged out successfully",
     }

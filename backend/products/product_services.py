@@ -111,7 +111,7 @@ class ProductService:
     async def get_product_by_id_response(self, product_id: str) -> SingleProductResponse:
         """
         Get product by ID and return formatted response.
-        
+
         Raises ValueError if product not found.
         """
         product = await self.get_product_by_id(product_id)
@@ -127,7 +127,7 @@ class ProductService:
     async def create_product(self, request: ProductCreateRequest) -> dict:
         """
         Create a new product.
-        
+
         Raises ValueError if SKU already exists.
         """
         # Check if SKU already exists
@@ -165,7 +165,7 @@ class ProductService:
     async def create_product_response(self, request: ProductCreateRequest) -> SingleProductResponse:
         """
         Create a new product and return formatted response.
-        
+
         Raises ValueError if SKU already exists.
         """
         product = await self.create_product(request)
@@ -180,7 +180,7 @@ class ProductService:
     ) -> tuple[list[dict], int]:
         """
         List products with filtering and pagination.
-        
+
         Returns (products, total_count) tuple.
         """
         # Build WHERE clause
@@ -216,7 +216,7 @@ class ProductService:
 
         query = f"""
             SELECT product_id, product_sku, name, price, qty, photo_url, category, is_active
-            FROM products 
+            FROM products
             {where_clause}
             ORDER BY created_at DESC
             LIMIT ${limit_param} OFFSET ${offset_param}
@@ -241,9 +241,9 @@ class ProductService:
     async def get_categories(self) -> list[str]:
         """Get list of unique product categories."""
         query = """
-            SELECT DISTINCT category 
-            FROM products 
-            WHERE is_active = TRUE 
+            SELECT DISTINCT category
+            FROM products
+            WHERE is_active = TRUE
             ORDER BY category
         """
         results = await self.db.read(query)
@@ -257,4 +257,3 @@ class ProductService:
 
 # Global product service instance
 product_service = ProductService()
-

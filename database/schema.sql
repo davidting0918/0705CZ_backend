@@ -82,21 +82,21 @@ CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
 CREATE TABLE orders (
     order_id                VARCHAR(16) PRIMARY KEY,  -- random hash 16 characters
     user_id                 VARCHAR(6) REFERENCES users(user_id) ON DELETE SET NULL,
-    
+
     -- User info snapshot at order time
     user_name               VARCHAR(100) NOT NULL,
     user_email              VARCHAR(255) NOT NULL,
     user_phone              VARCHAR(20) NOT NULL,
-    
+
     -- Delivery information
     shipping_method         delivery_method NOT NULL DEFAULT 'c2c',
     shipping_address        TEXT,
-    
+
     -- Convenience store info (for CVS pickup)
     c2c_store_id            VARCHAR(20),
     c2c_store_name          VARCHAR(100),
     c2c_store_address       TEXT,
-    
+
     -- Order amounts
     currency                VARCHAR(3) NOT NULL DEFAULT 'TWD',
     qty                     INTEGER NOT NULL DEFAULT 0,
@@ -107,16 +107,16 @@ CREATE TABLE orders (
     -- Payment info
     payment_method          payment_method NOT NULL DEFAULT 'cash_on_delivery',
     payment_status          VARCHAR(20) DEFAULT 'pending',
-    
+
     -- Order status
     status                  order_status NOT NULL DEFAULT 'pending',
     tracking_number         VARCHAR(100),
     shipped_at              TIMESTAMPTZ,
     delivered_at            TIMESTAMPTZ,
-    
+
     -- Notes
     notes                   TEXT,
-    
+
     -- Timestamps
     created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -128,7 +128,7 @@ CREATE INDEX idx_orders_created ON orders(created_at DESC);
 CREATE INDEX idx_orders_payment_status ON orders(payment_status);
 
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();   
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
 -- TABLE: order_details
@@ -138,11 +138,11 @@ CREATE TABLE order_details (
     id                  SERIAL PRIMARY KEY,
     order_id            VARCHAR(16) NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
     product_id          VARCHAR(9) REFERENCES products(product_id) ON DELETE SET NULL,
-    
+
     -- Product snapshot at purchase time
     product_sku         VARCHAR(50) NOT NULL,
     product_name        VARCHAR(255) NOT NULL,
-    
+
     -- Order line details
     qty                 INTEGER NOT NULL CHECK (qty > 0),
     price               DECIMAL(10, 2) NOT NULL CHECK (price >= 0),

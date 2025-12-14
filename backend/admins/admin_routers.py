@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from backend.auth.auth_services import get_current_admin_token
 from backend.admins.admin_models import AdminRegisterRequest, AdminResponse
 from backend.admins.admin_services import admin_service
+from backend.auth.auth_services import get_current_admin_token
 
 router = APIRouter(prefix="/admins", tags=["admins"])
 
@@ -22,6 +22,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 # ================== Authenticated Admin Endpoints ==================
+
 
 @router.get("/me", response_model=AdminResponse)
 async def get_current_admin_profile(
@@ -35,6 +36,7 @@ async def get_current_admin_profile(
 
 
 # ================== Public Endpoints ==================
+
 
 @router.post("/register", response_model=AdminResponse)
 async def register_admin(body: AdminRegisterRequest) -> AdminResponse:
@@ -61,6 +63,7 @@ async def register_admin(body: AdminRegisterRequest) -> AdminResponse:
 
 
 # ================== Public Endpoints (Rate Limited) ==================
+
 
 @router.get("/{admin_id}")
 @limiter.limit("60/minute")

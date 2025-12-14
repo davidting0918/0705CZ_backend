@@ -210,38 +210,34 @@ def is_test() -> bool:
 def get_database_connection_string(environment: Optional[str] = None) -> str:
     """
     Get database connection string for the specified environment.
-    
+
     Args:
         environment (str, optional): Force specific environment.
                                     If None, auto-detect from environment variables.
-    
+
     Returns:
         str: PostgreSQL connection string from environment variable
-    
+
     Raises:
         ValueError: If connection string not found for the environment
     """
     env_config_instance = EnvironmentConfig(environment)
     env_name = env_config_instance.environment.value
-    
+
     # Map environment names to environment variable names
-    env_var_map = {
-        "test": "POSTGRES_TEST",
-        "staging": "POSTGRES_STAGING",
-        "prod": "POSTGRES_PROD"
-    }
-    
+    env_var_map = {"test": "POSTGRES_TEST", "staging": "POSTGRES_STAGING", "prod": "POSTGRES_PROD"}
+
     env_var_name = env_var_map.get(env_name)
     if not env_var_name:
         raise ValueError(f"Unknown environment: {env_name}")
-    
+
     conn_str = os.getenv(env_var_name)
     if not conn_str:
         raise ValueError(
             f"Database connection string not found. "
             f"Please set {env_var_name} environment variable for environment: {env_name}"
         )
-    
+
     return conn_str
 
 
