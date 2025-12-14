@@ -35,7 +35,7 @@ jobs:
         
     - name: Run tests with coverage
       env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        POSTGRES_TEST: ${{ secrets.POSTGRES_TEST }}
         APP_ENV: test
         PYTEST_RUNNING: "1"
       run: |
