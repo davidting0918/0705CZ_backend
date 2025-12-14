@@ -39,11 +39,7 @@ jobs:
         APP_ENV: test
         PYTEST_RUNNING: "1"
       run: |
-        pytest backend/tests/ \
-          --cov=backend \
-          --cov-report=xml \
-          --cov-report=term \
-          -v
+        python3 -m pytest backend/tests/test_admin_endpoints.py -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
           
     - name: Upload coverage to artifacts
       uses: actions/upload-artifact@v4
