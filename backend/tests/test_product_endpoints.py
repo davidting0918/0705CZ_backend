@@ -559,4 +559,3 @@ class TestProductEndpointsIntegration:
         test_helper.assert_response_structure(data, expected_status=1)
         assert "data" in data
         assert isinstance(data["data"], list)
-

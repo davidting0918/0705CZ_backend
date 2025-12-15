@@ -436,10 +436,10 @@ async def add_admin_to_whitelist(email: str) -> None:
 def set_session_cookie_on_client(client: AsyncClient, session_token: str) -> None:
     """
     Set session cookie on an async client.
-    
+
     Helper function for manually setting cookies on async_client instances.
     For most use cases, prefer using the async_client_with_user1 fixture instead.
-    
+
     Args:
         client: AsyncClient instance to set cookie on
         session_token: Session token value to set
@@ -450,15 +450,15 @@ def set_session_cookie_on_client(client: AsyncClient, session_token: str) -> Non
 def extract_session_token_from_response(response) -> str:
     """
     Extract session token from login response cookies.
-    
+
     Helper function to extract session_token from HTTP response cookies.
-    
+
     Args:
         response: HTTP response object with cookies
-        
+
     Returns:
         Session token string
-        
+
     Raises:
         ValueError: If session_token cookie not found
     """
@@ -604,7 +604,7 @@ async def session_users(test_db) -> Dict[str, Dict[str, str]]:
     """
     Create session-wide test users that persist across all tests.
     This dramatically improves test performance by avoiding repeated user creation.
-    
+
     Users authenticate via HTTP-only session cookies (unlike admins who use Bearer tokens).
     The session_token cookie is extracted from login responses and stored for reuse.
 
@@ -730,10 +730,10 @@ async def async_client_with_user1(
 ) -> AsyncGenerator[AsyncClient, None]:
     """
     Provide async HTTP client pre-configured with user1 session cookie.
-    
+
     This fixture automatically sets the session_token cookie on the async_client,
     so tests can immediately make authenticated requests without manually setting cookies.
-    
+
     Usage:
         async def test_something(self, async_client_with_user1):
             # Client already has session cookie set
