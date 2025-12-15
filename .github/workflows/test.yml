@@ -48,6 +48,15 @@ jobs:
         PYTEST_RUNNING: "1"
       run: |
         python3 -m pytest backend/tests/test_user_endpoints.py -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
+    
+    - name: Run product tests
+      env:
+        POSTGRES_TEST: ${{ secrets.POSTGRES_TEST }}
+        APP_ENV: test
+        PYTEST_RUNNING: "1"
+      run: |
+        python3 -m pytest backend/tests/test_product_endpoints.py -v --tb=short --cov=. --cov-report=xml --cov-report=term-missing
+
 
     - name: Upload coverage to artifacts
       uses: actions/upload-artifact@v4

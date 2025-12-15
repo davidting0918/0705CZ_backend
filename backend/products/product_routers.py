@@ -31,7 +31,7 @@ limiter = Limiter(key_func=get_remote_address)
 # ================== Public Endpoints (Rate Limited) ==================
 
 
-@router.get("/", response_model=ProductListResponse)
+@router.get("/info", response_model=ProductListResponse)
 @limiter.limit("60/minute")
 async def list_products(
     request: Request,
@@ -86,7 +86,7 @@ async def get_product(
 # ================== Access Token Protected Endpoints (Staff Only) ==================
 
 
-@router.post("/", response_model=SingleProductResponse)
+@router.post("/create", response_model=SingleProductResponse)
 async def create_product(
     body: ProductCreateRequest,
     current_admin: dict = Depends(get_current_admin_token),

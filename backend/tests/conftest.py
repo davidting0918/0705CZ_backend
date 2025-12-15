@@ -433,6 +433,41 @@ async def add_admin_to_whitelist(email: str) -> None:
         print(f"Warning: Error adding {email} to whitelist: {e}")
 
 
+def set_session_cookie_on_client(client: AsyncClient, session_token: str) -> None:
+    """
+    Set session cookie on an async client.
+    
+    Helper function for manually setting cookies on async_client instances.
+    For most use cases, prefer using the async_client_with_user1 fixture instead.
+    
+    Args:
+        client: AsyncClient instance to set cookie on
+        session_token: Session token value to set
+    """
+    client.cookies.set("session_token", session_token)
+
+
+def extract_session_token_from_response(response) -> str:
+    """
+    Extract session token from login response cookies.
+    
+    Helper function to extract session_token from HTTP response cookies.
+    
+    Args:
+        response: HTTP response object with cookies
+        
+    Returns:
+        Session token string
+        
+    Raises:
+        ValueError: If session_token cookie not found
+    """
+    session_token = response.cookies.get("session_token")
+    if not session_token:
+        raise ValueError("session_token cookie not found in response")
+    return session_token
+
+
 # ================== SESSION-SCOPED TEST USERS (PERFORMANCE OPTIMIZED) ==================
 
 
@@ -559,3 +594,154 @@ async def session_admin1(session_admins: Dict[str, Dict[str, str]]) -> Dict[str,
 async def session_auth_headers_admin1(session_admin1: Dict[str, str]) -> Dict[str, str]:
     """Get auth headers for session admin 1"""
     return {"Authorization": f"Bearer {session_admin1['access_token']}", "Content-Type": "application/json"}
+
+
+# ================== SESSION-SCOPED TEST USERS (COOKIE-BASED AUTH) ==================
+
+
+@pytest_asyncio.fixture(scope="session")
+async def session_users(test_db) -> Dict[str, Dict[str, str]]:
+    """
+    Create session-wide test users that persist across all tests.
+    This dramatically improves test performance by avoiding repeated user creation.
+    
+    Users authenticate via HTTP-only session cookies (unlike admins who use Bearer tokens).
+    The session_token cookie is extracted from login responses and stored for reuse.
+
+    Returns:
+        Dict with 'user1' key containing user info and session_token
+    """
+    from httpx import AsyncClient
+
+    user_configs = [
+        {
+            "email": "session.user1@example.com",
+            "name": "Session User 1",
+            "password": "TestPassword123!",
+            "key": "user1",
+        },
+    ]
+
+    created_users = {}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        for user_config in user_configs:
+            print(f"Creating session user: {user_config['email']}")
+
+            # Try to create user
+            register_response = await client.post(
+                "/users/register",
+                headers={
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "email": user_config["email"],
+                    "name": user_config["name"],
+                    "password": user_config["password"],
+                },
+            )
+
+            user_created = False
+            # Handle user creation response
+            if register_response.status_code == 200:
+                # User created successfully
+                created_user = register_response.json()["data"]
+                user_created = True
+                user_info = created_user
+                print(f"✅ Session user created: {user_config['name']} (ID: {created_user['user_id']})")
+            elif register_response.status_code == 400 and "already exists" in register_response.text.lower():
+                # User already exists from previous test run - fetch it
+                from backend.users.user_services import user_service
+
+                existing_user = await user_service.get_user_by_email(user_config["email"])
+                if existing_user:
+                    user_info = existing_user
+                    print(f"⚠️  User already exists, will use existing user: {user_config['email']}")
+                else:
+                    error_msg = f"User already exists but could not fetch: {user_config['email']}"
+                    print(f"❌ {error_msg}")
+                    raise Exception(error_msg)
+            else:
+                # Other error - fail fast
+                error_msg = f"Failed to create session user {user_config['name']}: {register_response.text}"
+                print(f"❌ {error_msg}")
+                raise Exception(error_msg)
+
+            # Login to get session cookie (works for both new and existing users)
+            login_response = await client.post(
+                "/auth/email/user/login",
+                json={"email": user_config["email"], "password": user_config["password"]},
+            )
+
+            if login_response.status_code != 200:
+                error_msg = f"Failed to login session user {user_config['name']}: {login_response.text}"
+                print(f"❌ {error_msg}")
+                raise Exception(error_msg)
+
+            # Extract session token from cookie
+            session_token = login_response.cookies.get("session_token")
+            if not session_token:
+                error_msg = f"Session token not found in login response for {user_config['name']}"
+                print(f"❌ {error_msg}")
+                raise Exception(error_msg)
+
+            # Get user info if not already available
+            if not user_created:
+                # For existing users, fetch user info using the session cookie
+                client.cookies.set("session_token", session_token)
+                me_response = await client.get(
+                    "/users/me",
+                    headers={
+                        "Content-Type": "application/json",
+                    },
+                )
+                if me_response.status_code != 200:
+                    error_msg = f"Failed to get user info for {user_config['name']}: {me_response.text}"
+                    print(f"❌ {error_msg}")
+                    raise Exception(error_msg)
+                me_data = me_response.json()
+                # Extract user data from response (UserResponse wraps data in 'data' field)
+                user_info = me_data["data"]
+                print(f"✅ Session user ready (existing): {user_config['name']} (ID: {user_info['user_id']})")
+
+            created_users[user_config["key"]] = {
+                "user_id": user_info["user_id"],
+                "email": user_config["email"],
+                "name": user_config["name"],
+                "password": user_config["password"],
+                "session_token": session_token,
+            }
+
+    yield created_users
+
+    # Cleanup after all tests (optional - database cleanup handles this)
+    print("🧹 Session users will be cleaned up by database cleanup")
+
+
+@pytest_asyncio.fixture(scope="session")
+async def session_user1(session_users: Dict[str, Dict[str, str]]) -> Dict[str, str]:
+    """Get session user 1 info with session_token"""
+    return session_users["user1"]
+
+
+@pytest_asyncio.fixture
+async def async_client_with_user1(
+    async_client: AsyncClient, session_user1: Dict[str, str]
+) -> AsyncGenerator[AsyncClient, None]:
+    """
+    Provide async HTTP client pre-configured with user1 session cookie.
+    
+    This fixture automatically sets the session_token cookie on the async_client,
+    so tests can immediately make authenticated requests without manually setting cookies.
+    
+    Usage:
+        async def test_something(self, async_client_with_user1):
+            # Client already has session cookie set
+            response = await async_client_with_user1.get("/users/me")
+            assert response.status_code == 200
+    """
+    # Set the session cookie on the client
+    async_client.cookies.set("session_token", session_user1["session_token"])
+    yield async_client
+    # Clean up cookies after test
+    async_client.cookies.clear()
