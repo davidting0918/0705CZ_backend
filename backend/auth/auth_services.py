@@ -43,8 +43,13 @@ class AuthService:
     """Authentication service handling all auth methods."""
 
     def __init__(self):
+        # User website Google OAuth credentials
         self.google_client_id = os.getenv("GOOGLE_CLIENT_ID")
         self.google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        # Admin dashboard Google OAuth credentials
+        self.google_admin_client_id = os.getenv("GOOGLE_ADMIN_CLIENT_ID")
+        self.google_admin_client_secret = os.getenv("GOOGLE_ADMIN_CLIENT_SECRET")
+        # LINE OAuth credentials
         self.line_client_id = os.getenv("LINE_CLIENT_ID")
         self.line_client_secret = os.getenv("LINE_CLIENT_SECRET")
         self.line_redirect_uri = os.getenv("LINE_REDIRECT_URI", "http://localhost:8000/auth/line/callback")
@@ -163,8 +168,29 @@ class AuthService:
         except Exception:
             return None
 
-    async def verify_google_token(self, token: str) -> Optional[GoogleUserInfo]:
-        """Verify Google OAuth token and get user info."""
+    async def verify_google_token(
+        self, token: str, expected_client_id: Optional[str] = None
+    ) -> Optional[GoogleUserInfo]:
+        """
+        Verify Google OAuth token and get user info.
+
+        Args:
+            token: Google OAuth token
+            expected_client_id: Optional client ID to validate against. If provided, verifies
+                              that the token was issued for this specific client ID.
+
+        Returns:
+            GoogleUserInfo if token is valid, None otherwise
+        """
+        # If client ID validation is required, check tokeninfo endpoint first
+        if expected_client_id:
+            tokeninfo = await self._make_http_request(
+                "GET", f"https://oauth2.googleapis.com/tokeninfo?access_token={token}"
+            )
+            if not tokeninfo or tokeninfo.get("aud") != expected_client_id:
+                return None
+
+        # Get user info from userinfo endpoint
         data = await self._make_http_request(
             "GET", "https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {token}"}
         )
@@ -254,8 +280,9 @@ class AuthService:
         """
         Authenticate via Google OAuth.
         Creates user if not exists, updates google_id if needed.
+        Validates token against user website client ID.
         """
-        google_info = await self.verify_google_token(token)
+        google_info = await self.verify_google_token(token, expected_client_id=self.google_client_id)
         if not google_info:
             return None
 
@@ -270,6 +297,7 @@ class AuthService:
         """
         Authenticate admin via Google OAuth.
         Checks email whitelist, creates admin if not exists, updates google_id if needed.
+        Validates token against admin dashboard client ID.
 
         Args:
             token: Google OAuth token
@@ -280,8 +308,8 @@ class AuthService:
         Raises:
             HTTPException: If email is not whitelisted (403) or Google token is invalid (401)
         """
-        # Verify Google token
-        google_info = await self.verify_google_token(token)
+        # Verify Google token with admin client ID validation
+        google_info = await self.verify_google_token(token, expected_client_id=self.google_admin_client_id)
         if not google_info:
             return None
 
