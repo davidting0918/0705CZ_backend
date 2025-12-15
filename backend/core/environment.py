@@ -105,7 +105,8 @@ class EnvironmentConfig:
                     "http://localhost:3001",
                     "https://0705-cz.vercel.app",
                     "https://0705-cz.com",
-                    "https://0705-cz-dashboard.vercel.app" "http://localhost:5173",
+                    "https://0705-cz-dashboard.vercel.app",
+                    "http://localhost:5173",
                     "http://localhost:5174",
                 ],
                 "base_url": os.getenv("STAGING_BASE_URL", ""),  # Can be overridden by env var
