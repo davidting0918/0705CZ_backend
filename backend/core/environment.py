@@ -103,7 +103,8 @@ class EnvironmentConfig:
                 "cors_origins": [
                     "http://localhost:3000",
                     "http://localhost:3001",
-                    "https://pet-care-lake-six.vercel.app",
+                    "https://0705-cz.vercel.app",
+                    "https://0705-cz.com",
                     "http://localhost:5173",
                     "http://localhost:5174",
                 ],
@@ -112,7 +113,7 @@ class EnvironmentConfig:
             Environment.PRODUCTION: {
                 "debug": False,
                 "log_level": "INFO",
-                "cors_origins": ["https://yourapp.com", "https://www.yourapp.com"],
+                "cors_origins": ["https://0705-cz.vercel.app", "https://0705-cz.com"],
                 "base_url": "",
             },
         }
